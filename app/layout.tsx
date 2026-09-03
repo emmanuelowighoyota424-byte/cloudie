@@ -3,8 +3,8 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'Cloudie — Business operations, beautifully connected',
+  description: 'Cloudie brings shipments, documents, payments, and partner operations into one intelligent workspace.',
   generator: 'v0.app',
   icons: {
     icon: [
