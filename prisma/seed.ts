@@ -1,31 +1,45 @@
-import { PrismaClient, ShipmentStatus, UserRole } from '@prisma/client'
+import { PrismaClient, UserRole, WorkspaceRole } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@cloudie.app' },
-    update: { role: UserRole.ADMIN },
-    create: { email: 'admin@cloudie.app', name: 'Cloudie Admin', role: UserRole.ADMIN },
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase()
+  if (!email) {
+    console.log('No BOOTSTRAP_ADMIN_EMAIL configured; nothing to seed.')
+    return
+  }
+
+  const name = process.env.BOOTSTRAP_ADMIN_NAME?.trim() || 'Cloudie Administrator'
+  const user = await prisma.user.upsert({
+    where: { email },
+    update: { role: UserRole.SUPER_ADMIN },
+    create: { id: randomUUID(), email, name, role: UserRole.SUPER_ADMIN },
   })
 
-  await prisma.shipment.createMany({
-    data: [
-      { trackingId: 'CLD-4829', userId: admin.id, customer: 'Northstar Labs', origin: 'Lagos', destination: 'London', status: ShipmentStatus.IN_TRANSIT },
-      { trackingId: 'CLD-4828', userId: admin.id, customer: 'Kora Supply Co.', origin: 'Accra', destination: 'New York', status: ShipmentStatus.DELIVERED },
-      { trackingId: 'CLD-4827', userId: admin.id, customer: 'Mira Studios', origin: 'Nairobi', destination: 'Berlin', status: ShipmentStatus.PENDING },
-    ],
-    skipDuplicates: true,
+  const slug = `${user.id.slice(-12).toLowerCase()}-workspace`
+  const workspace = await prisma.workspace.upsert({
+    where: { slug },
+    update: { ownerId: user.id },
+    create: {
+      name: process.env.BOOTSTRAP_WORKSPACE_NAME?.trim() || `${name}'s Workspace`,
+      slug,
+      ownerId: user.id,
+      members: { create: { userId: user.id, role: WorkspaceRole.WORKSPACE_ADMIN } },
+      subscription: { create: { plan: 'FREE', status: 'ACTIVE' } },
+    },
   })
 
-  await prisma.pointLedger.createMany({
-    data: [
-      { userId: admin.id, amount: 2500, balance: 18420, description: 'Wallet top-up', reference: 'SEED-TOPUP' },
-      { userId: admin.id, amount: 240, balance: 15920, description: 'Referral reward', reference: 'CLD-4828' },
-      { userId: admin.id, amount: -120, balance: 15680, description: 'Shipment creation', reference: 'CLD-4829' },
-    ],
-    skipDuplicates: true,
+  await prisma.workspaceMember.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: user.id } },
+    update: { role: WorkspaceRole.WORKSPACE_ADMIN, status: 'ACTIVE' },
+    create: { workspaceId: workspace.id, userId: user.id, role: WorkspaceRole.WORKSPACE_ADMIN },
   })
+
+  console.log(`Bootstrapped administrator workspace: ${workspace.id}`)
 }
 
-main().finally(() => prisma.$disconnect())
+main().catch((error) => {
+  console.error('Seed failed:', error)
+  process.exitCode = 1
+}).finally(() => prisma.$disconnect())
