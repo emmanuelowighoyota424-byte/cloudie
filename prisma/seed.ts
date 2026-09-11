@@ -1,4 +1,4 @@
-import { PrismaClient, MembershipRole, ShipmentStatus, UserRole } from '@prisma/client'
+import { PrismaClient, MembershipRole, PointEntryType, ShipmentStatus, UserRole } from '@prisma/client'
 
 const prisma = new PrismaClient()
 
@@ -21,6 +21,12 @@ async function main() {
     create: { workspaceId: workspace.id, userId: admin.id, role: MembershipRole.OWNER },
   })
 
+  const account = await prisma.pointAccount.upsert({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: admin.id } },
+    update: { balance: 2620, version: 3 },
+    create: { workspaceId: workspace.id, userId: admin.id, balance: 2620, version: 3 },
+  })
+
   await prisma.shipment.createMany({
     data: [
       { trackingId: 'CLD-4829', userId: admin.id, workspaceId: workspace.id, customer: 'Northstar Labs', origin: 'Lagos', destination: 'London', status: ShipmentStatus.IN_TRANSIT },
@@ -32,9 +38,9 @@ async function main() {
 
   await prisma.pointLedger.createMany({
     data: [
-      { userId: admin.id, workspaceId: workspace.id, amount: 2500, balance: 18420, description: 'Wallet top-up', reference: 'SEED-TOPUP', idempotencyKey: 'seed-topup-v1' },
-      { userId: admin.id, workspaceId: workspace.id, amount: 240, balance: 15920, description: 'Referral reward', reference: 'CLD-4828', idempotencyKey: 'seed-referral-v1' },
-      { userId: admin.id, workspaceId: workspace.id, amount: -120, balance: 15680, description: 'Shipment creation', reference: 'CLD-4829', idempotencyKey: 'seed-shipment-v1' },
+      { userId: admin.id, workspaceId: workspace.id, pointAccountId: account.id, type: PointEntryType.CREDIT, amount: 2500, balance: 2500, description: 'Wallet top-up', reference: 'SEED-TOPUP', idempotencyKey: 'seed-topup-v2' },
+      { userId: admin.id, workspaceId: workspace.id, pointAccountId: account.id, type: PointEntryType.CREDIT, amount: 240, balance: 2740, description: 'Referral reward', reference: 'CLD-4828', idempotencyKey: 'seed-referral-v2' },
+      { userId: admin.id, workspaceId: workspace.id, pointAccountId: account.id, type: PointEntryType.DEBIT, amount: -120, balance: 2620, description: 'Shipment creation', reference: 'CLD-4829', idempotencyKey: 'seed-shipment-v2' },
     ],
     skipDuplicates: true,
   })
