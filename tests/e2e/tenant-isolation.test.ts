@@ -1,6 +1,5 @@
 import test, { after, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/prisma'
 import { getTestAuth } from './auth-test'
 
@@ -30,8 +29,9 @@ before(async () => {
   if (!enabled) return
   testAuth = await getTestAuth()
   const prefix = `cloudie-e2e-${Date.now()}`
-  const testUsers = await Promise.all(['admin-a', 'admin-b', 'customer-a', 'customer-b', 'driver-a', 'driver-b', 'warehouse-a', 'warehouse-b'].map((name) => prisma.user.create({ data: { id: randomUUID(), email: `${prefix}-${name}@example.test`, name: `E2E ${name}`, emailVerified: true } })))
-  users = testUsers.map((user) => ({ id: user.id }))
+  const testUsers = ['admin-a', 'admin-b', 'customer-a', 'customer-b', 'driver-a', 'driver-b', 'warehouse-a', 'warehouse-b'].map((name) => testAuth.createUser({ email: `${prefix}-${name}@example.test`, name: `E2E ${name}`, emailVerified: true }))
+  const savedUsers = await Promise.all(testUsers.map((user) => testAuth.saveUser(user)))
+  users = savedUsers.map((user) => ({ id: user.id }))
 
   workspaceA = await prisma.workspace.create({
     data: {
