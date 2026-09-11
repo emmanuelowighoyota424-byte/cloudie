@@ -32,3 +32,55 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm test
       - run: pnpm run build
+
+  e2e-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cloudie_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d cloudie_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/cloudie_e2e
+      BETTER_AUTH_SECRET: ci-e2e-secret-for-cloudie-auth-32-chars
+      BETTER_AUTH_URL: http://127.0.0.1:3000
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
+      E2E_BASE_URL: http://127.0.0.1:3000
+      NODE_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prisma generate
+      - run: pnpm exec prisma migrate deploy
+      - run: pnpm run build
+      - name: Start Cloudie
+        run: |
+          nohup pnpm start > /tmp/cloudie-e2e.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS "$E2E_BASE_URL/api/health" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/cloudie-e2e.log
+          exit 1
+      - run: pnpm exec tsx --test tests/e2e/tenant-isolation.test.ts
+      - name: Dump application log on failure
+        if: failure()
+        run: cat /tmp/cloudie-e2e.log || true
