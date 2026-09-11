@@ -22,11 +22,40 @@ enum WorkspaceRole {
   CUSTOMER
   VENDOR
 }
-enum WorkspaceMemberStatus { ACTIVE SUSPENDED }
-enum InvitationStatus { PENDING ACCEPTED REVOKED EXPIRED }
-enum ShipmentStatus { PENDING CONFIRMED PICKED_UP IN_TRANSIT OUT_FOR_DELIVERY DELIVERED CANCELLED FAILED RETURNED }
-enum Plan { FREE STARTER BUSINESS ENTERPRISE }
-enum SubscriptionStatus { ACTIVE TRIALING PAST_DUE CANCELED INCOMPLETE }
+enum WorkspaceMemberStatus {
+  ACTIVE
+  SUSPENDED
+}
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+enum ShipmentStatus {
+  PENDING
+  CONFIRMED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  FAILED
+  RETURNED
+}
+enum Plan {
+  FREE
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
 
 model User {
   id String @id
