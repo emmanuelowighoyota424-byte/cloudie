@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { requireWorkspaceMember } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { createDispute, listDisputes, updateDispute } from '@/lib/platform-db'
@@ -24,7 +25,6 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const { user, membership } = await requireWorkspaceMember(workspaceId)
     const body = await request.json().catch(() => null) as Record<string, unknown> | null
     const action = body?.action === 'update' ? 'update' : 'create'
-
     if (action === 'update') {
       if (!adminRoles.includes(membership.role)) return NextResponse.json({ error: 'Admin review required' }, { status: 403 })
       const id = typeof body?.id === 'string' ? body.id : ''
@@ -39,7 +39,6 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
       await prisma.auditLog.create({ data: { actorId: user.id, workspaceId, action: 'dispute.status_changed', entity: 'MarketplaceDispute', entityId: id, metadata: { from: current.status, to: status } } })
       return NextResponse.json({ dispute })
     }
-
     const orderId = typeof body?.orderId === 'string' ? body.orderId : ''
     const reason = typeof body?.reason === 'string' ? body.reason.trim() : ''
     const description = typeof body?.description === 'string' ? body.description.trim() : ''
