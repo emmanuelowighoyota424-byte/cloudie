@@ -7,13 +7,55 @@ datasource db {
   url = env("DATABASE_URL")
 }
 
-enum UserRole { USER ADMIN SUPER_ADMIN }
-enum WorkspaceRole { SUPER_ADMIN WORKSPACE_ADMIN MANAGER STAFF DRIVER WAREHOUSE_STAFF CUSTOMER VENDOR }
-enum WorkspaceMemberStatus { ACTIVE SUSPENDED }
-enum InvitationStatus { PENDING ACCEPTED REVOKED EXPIRED }
-enum ShipmentStatus { PENDING CONFIRMED PICKED_UP IN_TRANSIT OUT_FOR_DELIVERY DELIVERED CANCELLED FAILED RETURNED }
-enum Plan { FREE STARTER BUSINESS ENTERPRISE }
-enum SubscriptionStatus { ACTIVE TRIALING PAST_DUE CANCELED INCOMPLETE }
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+enum WorkspaceRole {
+  SUPER_ADMIN
+  WORKSPACE_ADMIN
+  MANAGER
+  STAFF
+  DRIVER
+  WAREHOUSE_STAFF
+  CUSTOMER
+  VENDOR
+}
+enum WorkspaceMemberStatus {
+  ACTIVE
+  SUSPENDED
+}
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+enum ShipmentStatus {
+  PENDING
+  CONFIRMED
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  FAILED
+  RETURNED
+}
+enum Plan {
+  FREE
+  STARTER
+  BUSINESS
+  ENTERPRISE
+}
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
 
 model User {
   id String @id
@@ -424,7 +466,7 @@ model Referral {
 }
 
 model AuditLog {
-  id String @id @default(cuid())
+  id String @id
   userId String?
   actorId String?
   workspaceId String?
