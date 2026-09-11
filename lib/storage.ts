@@ -17,39 +17,52 @@ export function sanitizeFilename(name: string) {
   return base || 'document'
 }
 
-function token() {
+function readWriteToken() {
   const value = process.env.BLOB_READ_WRITE_TOKEN?.trim()
-  if (!value) throw new StorageConfigurationError('Set BLOB_READ_WRITE_TOKEN to enable private document storage')
-  return value
+  return value || null
 }
 
-function storeIdFromToken(value: string) {
+function oidcStoreId() {
+  const value = process.env.BLOB_STORE_ID?.trim()
+  if (!value) return null
+  return value.startsWith('store_') ? value.slice('store_'.length) : value
+}
+
+function storeIdFromReadWriteToken(value: string) {
   const [, , , storeId] = value.split('_')
   if (!storeId) throw new StorageConfigurationError('BLOB_READ_WRITE_TOKEN does not contain a valid store id')
   return storeId
 }
 
-export async function putPrivateObject(pathname: string, body: ArrayBuffer, contentType: string) {
-  const bearer = token()
+function resolveAuth(oidcToken?: string | null) {
+  const bearer = readWriteToken()
+  if (bearer) return { bearer, storeId: storeIdFromReadWriteToken(bearer) }
+  const token = oidcToken?.trim()
+  const storeId = oidcStoreId()
+  if (token && storeId) return { bearer: token, storeId }
+  throw new StorageConfigurationError('Vercel Blob credentials are not configured')
+}
+
+export async function putPrivateObject(pathname: string, body: ArrayBuffer, contentType: string, oidcToken?: string | null) {
+  const { bearer, storeId } = resolveAuth(oidcToken)
   const response = await fetch(`${BLOB_API}/?pathname=${encodeURIComponent(pathname)}`, {
     method: 'PUT',
-    headers: { authorization: `Bearer ${bearer}`, 'x-vercel-blob-store-id': storeIdFromToken(bearer), 'x-api-version': '12', 'x-content-type': contentType, 'x-content-length': String(body.byteLength), 'x-add-random-suffix': '0' },
+    headers: { authorization: `Bearer ${bearer}`, 'x-vercel-blob-store-id': storeId, 'x-api-version': '12', 'x-content-type': contentType, 'x-content-length': String(body.byteLength), 'x-add-random-suffix': '0' },
     body,
   })
   if (!response.ok) throw new Error(`Storage upload failed (${response.status})`)
   return (await response.json()) as { pathname: string; url: string; downloadUrl?: string; etag?: string; contentType?: string }
 }
 
-export async function getPrivateObject(pathname: string) {
-  const bearer = token()
-  const storeId = storeIdFromToken(bearer)
+export async function getPrivateObject(pathname: string, oidcToken?: string | null) {
+  const { bearer, storeId } = resolveAuth(oidcToken)
   const response = await fetch(`https://${storeId}.private.blob.vercel-storage.com/${pathname}`, { headers: { authorization: `Bearer ${bearer}` }, cache: 'no-store' })
   if (!response.ok) throw new Error(response.status === 404 ? 'Document not found in storage' : `Storage read failed (${response.status})`)
   return response
 }
 
-export async function deletePrivateObject(url: string) {
-  const bearer = token()
+export async function deletePrivateObject(url: string, oidcToken?: string | null) {
+  const { bearer } = resolveAuth(oidcToken)
   const response = await fetch(`${BLOB_API}/delete`, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', 'x-api-version': '12' }, body: JSON.stringify({ urls: [url] }) })
   if (!response.ok) throw new Error(`Storage deletion failed (${response.status})`)
 }
