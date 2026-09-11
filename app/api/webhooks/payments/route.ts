@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
-import { notifyShipmentUsers } from '@/lib/notifications'
+import { notifyUsers } from '@/lib/notifications'
 
 function validSignature(raw: string, signature: string, secret: string) {
   const expected = createHmac('sha256', secret).update(raw).digest('hex')
@@ -28,7 +28,6 @@ export async function POST(request: Request) {
       throw error
     })
     if (!webhook) return NextResponse.json({ received: true, duplicate: true })
-
     const status = typeof payload.status === 'string' ? payload.status.toUpperCase() : ''
     const providerReference = typeof payload.reference === 'string' ? payload.reference.trim() : ''
     const orderId = typeof payload.orderId === 'string' ? payload.orderId : ''
@@ -48,9 +47,9 @@ export async function POST(request: Request) {
       await tx.order.update({ where: { id: orderId }, data: { paymentStatus: status, status: nextOrderStatus } })
       await tx.auditLog.create({ data: { userId: order.userId ?? undefined, workspaceId: order.workspaceId, action: `payment.${status.toLowerCase()}`, entity: 'Payment', entityId: payment.id, metadata: { provider, providerReference, orderId } } })
       await tx.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date() } })
-      return { payment, orderId, workspaceId: order.workspaceId }
+      return { orderId, workspaceId: order.workspaceId, userId: order.userId }
     })
-    if (status === 'PAID') await notifyShipmentUsers(result.workspaceId, result.orderId, 'Payment completed', `Payment for order ${result.orderId} was verified.`)
+    if (status === 'PAID' && result.userId) await notifyUsers({ workspaceId: result.workspaceId, userIds: [result.userId], title: 'Payment completed', message: `Payment for order ${result.orderId} was verified.`, type: 'PAYMENT' })
     return NextResponse.json({ received: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook processing failed'
