@@ -16,30 +16,34 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check baseline
         id: baseline
-        continue-on-error: true
-        run: test -f prisma/migrations/0_init/migration.sql
+        run: |
+          if [ -f prisma/migrations/0_init/migration.sql ]; then
+            echo "missing=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: pnpm/action-setup@v4
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
         with:
           version: 10
           run_install: false
       - uses: actions/setup-node@v4
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
       - run: pnpm exec prisma validate
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
       - run: mkdir -p prisma/migrations/0_init
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
       - run: pnpm exec prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > prisma/migrations/0_init/migration.sql
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
       - run: test -s prisma/migrations/0_init/migration.sql
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
       - name: Commit baseline migration
-        if: steps.baseline.outcome == 'failure'
+        if: steps.baseline.outputs.missing == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
