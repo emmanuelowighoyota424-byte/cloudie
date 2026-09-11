@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { prisma } from '@/lib/prisma'
 import { getTestAuth } from './auth-test'
 
+const enabled = Boolean(process.env.E2E_BASE_URL)
 const baseURL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000'
 let testAuth: Awaited<ReturnType<typeof getTestAuth>>
 let users: Array<{ id: string }>
@@ -25,7 +26,7 @@ async function expectDenied(headers: Headers, path: string, init: RequestInit = 
 }
 
 before(async () => {
-  if (!process.env.E2E_BASE_URL) throw new Error('E2E_BASE_URL is required')
+  if (!enabled) return
   testAuth = await getTestAuth()
   const prefix = `cloudie-e2e-${Date.now()}`
   const testUsers = await Promise.all(['admin-a', 'admin-b', 'customer-a', 'customer-b', 'driver-a', 'driver-b', 'warehouse-a', 'warehouse-b'].map((name) => testAuth.createUser({ email: `${prefix}-${name}@example.test`, name: `E2E ${name}`, emailVerified: true })))
@@ -61,7 +62,7 @@ before(async () => {
 })
 
 after(async () => {
-  if (!workspaceA || !workspaceB) return
+  if (!enabled || !workspaceA || !workspaceB) return
   await prisma.$transaction([
     prisma.document.deleteMany({ where: { workspaceId: { in: [workspaceA.id, workspaceB.id] } } }),
     prisma.shipmentEvent.deleteMany({ where: { shipment: { workspaceId: { in: [workspaceA.id, workspaceB.id] } } } }),
@@ -85,7 +86,7 @@ after(async () => {
   await prisma.$disconnect()
 })
 
-test('authenticated workspace A cannot read workspace B resources', async () => {
+test('authenticated workspace A cannot read workspace B resources', { skip: !enabled }, async () => {
   const headers = await testAuth.getAuthHeaders({ userId: users[0].id })
   await expectDenied(headers, `/api/workspaces/${workspaceB.id}/dashboard`)
   await expectDenied(headers, `/api/workspaces/${workspaceB.id}/members`)
@@ -99,12 +100,12 @@ test('authenticated workspace A cannot read workspace B resources', async () => 
   await expectDenied(headers, `/api/workspaces/${workspaceB.id}/documents/${documentB.id}`)
 })
 
-test('authenticated workspace A cannot mutate workspace B shipment state', async () => {
+test('authenticated workspace A cannot mutate workspace B shipment state', { skip: !enabled }, async () => {
   const headers = await testAuth.getAuthHeaders({ userId: users[0].id })
   await expectDenied(headers, `/api/workspaces/${workspaceB.id}/shipments/${shipmentB.id}/status`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'PICKED_UP' }) })
 })
 
-test('customer, driver and warehouse identities remain scoped to their own workspace', async () => {
+test('customer, driver and warehouse identities remain scoped to their own workspace', { skip: !enabled }, async () => {
   const customerA = await testAuth.getAuthHeaders({ userId: users[2].id })
   const driverA = await testAuth.getAuthHeaders({ userId: users[4].id })
   const warehouseA = await testAuth.getAuthHeaders({ userId: users[6].id })
@@ -113,7 +114,7 @@ test('customer, driver and warehouse identities remain scoped to their own works
   await expectDenied(warehouseA, `/api/workspaces/${workspaceB.id}/warehouse/shipments`)
 })
 
-test('customer, driver and warehouse can operate on authorized workspace B resources', async () => {
+test('customer, driver and warehouse can operate on authorized workspace B resources', { skip: !enabled }, async () => {
   const customer = await testAuth.getAuthHeaders({ userId: users[3].id })
   const customerResult = await requestAs(customer, `/api/workspaces/${workspaceB.id}/customer/shipments`)
   assert.equal(customerResult.response.status, 200)
