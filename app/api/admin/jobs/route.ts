@@ -16,7 +16,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const { user } = await requireSuperAdmin()
+    const user = await requireSuperAdmin()
     const body = await request.json().catch(() => null) as Record<string, unknown> | null
     const id = typeof body?.id === 'string' ? body.id : ''
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
