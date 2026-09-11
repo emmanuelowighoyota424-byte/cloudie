@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/authorization'
 
 function hashToken(token: string) {
