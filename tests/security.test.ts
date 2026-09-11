@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { roleHasPermission } from '../lib/permissions'
 import { sanitizeFilename, validateUpload } from '../lib/storage'
+import { canOperateWarehouseShipment } from '../lib/warehouse'
 
 test('permission matrix denies customer global shipment access', () => {
   assert.equal(roleHasPermission('CUSTOMER', 'shipments.read'), false)
@@ -16,6 +17,14 @@ test('workspace admin cannot grant platform super-admin permission through works
 test('driver has delivery permission but not member administration', () => {
   assert.equal(roleHasPermission('DRIVER', 'shipments.deliver'), true)
   assert.equal(roleHasPermission('DRIVER', 'members.manage'), false)
+})
+
+test('warehouse staff can operate only explicitly assigned warehouses', () => {
+  assert.equal(canOperateWarehouseShipment(['warehouse-a'], 'warehouse-a'), true)
+  assert.equal(canOperateWarehouseShipment(['warehouse-a'], 'warehouse-b'), false)
+  assert.equal(canOperateWarehouseShipment(['warehouse-a', 'warehouse-c'], 'warehouse-b'), false)
+  assert.equal(canOperateWarehouseShipment([], 'warehouse-a'), false)
+  assert.equal(canOperateWarehouseShipment(['warehouse-a'], null), false)
 })
 
 test('document filename sanitization removes path/control characters', () => {
