@@ -9,9 +9,8 @@ export async function GET(_: Request, context: { params: Promise<{ workspaceId: 
     await requirePermission(workspaceId, 'documents.read')
     const documents = await prisma.document.findMany({
       where: { workspaceId },
-      select: { id: true, name: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true, ownerId: true },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      select: { id: true, name: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true, ownerId: true, shipmentId: true, customerId: true },
+      orderBy: { createdAt: 'desc' }, take: 100,
     })
     return NextResponse.json({ documents: documents.map((d) => ({ ...d, sizeBytes: d.sizeBytes.toString() })) })
   } catch (error) {
@@ -28,32 +27,16 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const file = form.get('file')
     if (!(file instanceof File)) return NextResponse.json({ error: 'file is required' }, { status: 400 })
     validateUpload(file.type, file.size)
-
-    const shipmentId = typeof form.get('shipmentId') === 'string' ? String(form.get('shipmentId')) : null
-    const customerId = typeof form.get('customerId') === 'string' ? String(form.get('customerId')) : null
-    if (shipmentId) {
-      const shipment = await prisma.shipment.findFirst({ where: { id: shipmentId, workspaceId } })
-      if (!shipment) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 })
-    }
-    if (customerId) {
-      const customer = await prisma.customer.findFirst({ where: { id: customerId, workspaceId } })
-      if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
-    }
-
+    const shipmentId = typeof form.get('shipmentId') === 'string' && String(form.get('shipmentId')).trim() ? String(form.get('shipmentId')) : null
+    const customerId = typeof form.get('customerId') === 'string' && String(form.get('customerId')).trim() ? String(form.get('customerId')) : null
+    if (shipmentId && !(await prisma.shipment.findFirst({ where: { id: shipmentId, workspaceId }, select: { id: true } }))) return NextResponse.json({ error: 'Shipment not found' }, { status: 404 })
+    if (customerId && !(await prisma.customer.findFirst({ where: { id: customerId, workspaceId }, select: { id: true } }))) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
     const safeName = sanitizeFilename(file.name)
     const storageKey = `workspaces/${workspaceId}/documents/${crypto.randomUUID()}-${safeName}`
     const blob = await putPrivateObject(storageKey, await file.arrayBuffer(), file.type)
     const document = await prisma.$transaction(async (tx) => {
       const created = await tx.document.create({
-        data: {
-          workspaceId,
-          ownerId: user.id,
-          name: safeName,
-          mimeType: file.type,
-          sizeBytes: BigInt(file.size),
-          storageKey: blob.url,
-          versions: { create: { version: 1, storageKey: blob.url, sizeBytes: BigInt(file.size), checksum: blob.etag } },
-        },
+        data: { workspaceId, ownerId: user.id, shipmentId, customerId, name: safeName, mimeType: file.type, sizeBytes: BigInt(file.size), storageKey: blob.url, versions: { create: { version: 1, storageKey: blob.url, sizeBytes: BigInt(file.size), checksum: blob.etag } } },
       })
       await tx.documentAccess.create({ data: { documentId: created.id, userId: user.id, action: 'UPLOAD' } })
       await tx.auditLog.create({ data: { actorId: user.id, userId: user.id, workspaceId, action: 'document.uploaded', entity: 'Document', entityId: created.id, metadata: { mimeType: file.type, sizeBytes: file.size, shipmentId, customerId } } })
