@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { requireWorkspaceMember } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
-import { validateUpload, sanitizeFilename, putPrivateObject } from '@/lib/storage'
+import { validateUpload, sanitizeFilename, putPrivateObject, deletePrivateObject } from '@/lib/storage'
 
-const IMAGE_TYPES = new Set(['image/jpeg','image/png','image/webp','image/gif','image/avif'])
+const IMAGE_TYPES = new Set(['image/jpeg','image/png','image/webp'])
 
 export async function GET(_: Request, context: { params: Promise<{ workspaceId: string }> }) {
   try {
@@ -24,7 +24,7 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const { user } = await requireWorkspaceMember(workspaceId)
     const form = await request.formData()
     const file = form.get('file')
-    if (!(file instanceof File) || !IMAGE_TYPES.has(file.type)) return NextResponse.json({ error: 'A supported image file is required' }, { status: 400 })
+    if (!(file instanceof File) || !IMAGE_TYPES.has(file.type)) return NextResponse.json({ error: 'A supported JPEG, PNG or WebP image is required' }, { status: 400 })
     validateUpload(file.type, file.size)
     const safeName = sanitizeFilename(file.name)
     const storageKey = `workspaces/${workspaceId}/assets/${crypto.randomUUID()}-${safeName}`
@@ -36,5 +36,26 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to upload image'
     return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : message.includes('configured') ? 503 : 400 })
+  }
+}
+
+export async function DELETE(request: Request, context: { params: Promise<{ workspaceId: string }> }) {
+  try {
+    const { workspaceId } = await context.params
+    const { user } = await requireWorkspaceMember(workspaceId)
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null
+    const id = typeof body?.id === 'string' ? body.id : ''
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+    const asset = (await prisma.$queryRaw<Array<{ id: string; url: string; ownerId: string }>>(Prisma.sql`SELECT "id","url","ownerId" FROM "CloudieAsset" WHERE "id"=${id} AND "workspaceId"=${workspaceId} AND "deletedAt" IS NULL LIMIT 1`))[0]
+    if (!asset) return NextResponse.json({ error: 'Asset not found' }, { status: 404 })
+    const membership = await prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: user.id } } })
+    if (asset.ownerId !== user.id && !['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER'].includes(membership?.role ?? '')) return NextResponse.json({ error: 'Asset access denied' }, { status: 403 })
+    if (asset.url) await deletePrivateObject(asset.url)
+    await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieAsset" SET "deletedAt"=CURRENT_TIMESTAMP WHERE "id"=${id} AND "workspaceId"=${workspaceId}`)
+    await prisma.auditLog.create({ data: { actorId: user.id, userId: user.id, workspaceId, action: 'asset.deleted', entity: 'CloudieAsset', entityId: id } })
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to delete asset'
+    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 400 })
   }
 }
