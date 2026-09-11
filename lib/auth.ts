@@ -4,7 +4,15 @@ import { absoluteAppUrl, sendEmail } from '@/lib/email'
 
 export const auth = betterAuth({
   database: pool,
-  baseURL: process.env.BETTER_AUTH_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : process.env.V0_RUNTIME_URL),
+  baseURL: {
+    allowedHosts: [
+      'cloudie-five.vercel.app',
+      '*.vercel.app',
+      ...(process.env.NODE_ENV === 'development' ? ['localhost:3000', 'localhost:5173'] : []),
+    ],
+    protocol: process.env.NODE_ENV === 'development' ? 'http' : 'https',
+    fallback: absoluteAppUrl('/'),
+  },
   user: { modelName: 'User' },
   session: { modelName: 'Session', expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
   account: { modelName: 'Account' },
@@ -37,7 +45,15 @@ export const auth = betterAuth({
   },
   trustedOrigins: [
     absoluteAppUrl('/'),
-    ...(process.env.NODE_ENV === 'development' ? ['http://localhost:3000', ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []), ...(process.env.V0_DEV_APP_URL ? [process.env.V0_DEV_APP_URL] : []), ...(process.env.V0_BUILD_URL ? [process.env.V0_BUILD_URL] : []), ...(process.env.V0_SANDBOX_URL ? [process.env.V0_SANDBOX_URL] : [])] : []),
-    ...(process.env.NODE_ENV === 'production' ? [...(process.env.VERCEL_URL ? [`https://${process.env.VERCEL_URL}`] : []), ...(process.env.VERCEL_PROJECT_PRODUCTION_URL ? [`https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`] : [])] : []),
+    'https://cloudie-five.vercel.app',
+    'https://*.vercel.app',
+    ...(process.env.NODE_ENV === 'development' ? [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      ...(process.env.V0_RUNTIME_URL ? [process.env.V0_RUNTIME_URL] : []),
+      ...(process.env.V0_DEV_APP_URL ? [process.env.V0_DEV_APP_URL] : []),
+      ...(process.env.V0_BUILD_URL ? [process.env.V0_BUILD_URL] : []),
+      ...(process.env.V0_SANDBOX_URL ? [process.env.V0_SANDBOX_URL] : []),
+    ] : []),
   ],
 })
