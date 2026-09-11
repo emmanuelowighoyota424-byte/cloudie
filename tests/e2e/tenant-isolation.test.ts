@@ -29,9 +29,8 @@ before(async () => {
   if (!enabled) return
   testAuth = await getTestAuth()
   const prefix = `cloudie-e2e-${Date.now()}`
-  const testUsers = await Promise.all(['admin-a', 'admin-b', 'customer-a', 'customer-b', 'driver-a', 'driver-b', 'warehouse-a', 'warehouse-b'].map((name) => testAuth.createUser({ email: `${prefix}-${name}@example.test`, name: `E2E ${name}`, emailVerified: true })))
+  const testUsers = await Promise.all(['admin-a', 'admin-b', 'customer-a', 'customer-b', 'driver-a', 'driver-b', 'warehouse-a', 'warehouse-b'].map((name) => prisma.user.create({ data: { email: `${prefix}-${name}@example.test`, name: `E2E ${name}`, emailVerified: true } })))
   users = testUsers.map((user) => ({ id: user.id }))
-  await Promise.all(users.map((user) => testAuth.saveUser(user as never)))
 
   workspaceA = await prisma.workspace.create({
     data: {
