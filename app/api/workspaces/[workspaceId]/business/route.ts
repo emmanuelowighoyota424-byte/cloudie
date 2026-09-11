@@ -1,0 +1,65 @@
+import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { requireWorkspaceRole } from '@/lib/authorization'
+import { prisma } from '@/lib/prisma'
+
+export async function GET(_: Request, context: { params: Promise<{ workspaceId: string }> }) {
+  try {
+    const { workspaceId } = await context.params
+    await requireWorkspaceRole(workspaceId, ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','CUSTOMER'])
+    const [staff, departments, invoices, customers, products, orders] = await Promise.all([
+      prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessStaff" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC LIMIT 200`),
+      prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessDepartment" WHERE "workspaceId"=${workspaceId} ORDER BY "name" ASC`),
+      prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessInvoice" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC LIMIT 100`),
+      prisma.customer.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      prisma.product.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      prisma.order.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+    ])
+    return NextResponse.json({ staff, departments, invoices, customers, products, orders })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to load business suite'
+    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 403 })
+  }
+}
+
+export async function POST(request: Request, context: { params: Promise<{ workspaceId: string }> }) {
+  try {
+    const { workspaceId } = await context.params
+    const { user } = await requireWorkspaceRole(workspaceId, ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER'])
+    const body = await request.json().catch(() => null) as Record<string, unknown> | null
+    const action = body?.action
+    if (action === 'department') {
+      const name = typeof body?.name === 'string' ? body.name.trim() : ''
+      if (!name) return NextResponse.json({ error: 'Department name is required' }, { status: 400 })
+      const id = crypto.randomUUID()
+      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessDepartment" ("id","workspaceId","name") VALUES (${id},${workspaceId},${name}) ON CONFLICT ("workspaceId","name") DO NOTHING`)
+      return NextResponse.json({ id }, { status: 201 })
+    }
+    if (action === 'staff') {
+      const userId = typeof body?.userId === 'string' ? body.userId : ''
+      const role = typeof body?.role === 'string' ? body.role : 'STAFF'
+      if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 })
+      const member = await prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } })
+      if (!member) return NextResponse.json({ error: 'User is not a workspace member' }, { status: 400 })
+      const id = crypto.randomUUID()
+      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessStaff" ("id","workspaceId","userId","departmentId","role") VALUES (${id},${workspaceId},${userId},${typeof body?.departmentId === 'string' ? body.departmentId : null},${role}) ON CONFLICT ("workspaceId","userId") DO UPDATE SET "role"=EXCLUDED."role","departmentId"=EXCLUDED."departmentId","updatedAt"=CURRENT_TIMESTAMP`)
+      await prisma.auditLog.create({ data: { actorId: user.id, workspaceId, action: 'business.staff_changed', entity: 'BusinessStaff', entityId: id, metadata: { userId, role } } })
+      return NextResponse.json({ id }, { status: 201 })
+    }
+    if (action === 'invoice') {
+      const number = typeof body?.number === 'string' ? body.number.trim() : ''
+      const currency = typeof body?.currency === 'string' ? body.currency.toUpperCase() : 'NGN'
+      const items = Array.isArray(body?.items) ? body.items : []
+      const subtotal = Number(body?.subtotal ?? 0)
+      const tax = Number(body?.tax ?? 0)
+      if (!number || !items.length || !Number.isFinite(subtotal) || !Number.isFinite(tax)) return NextResponse.json({ error: 'Invoice number, items and valid totals are required' }, { status: 400 })
+      const id = crypto.randomUUID()
+      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessInvoice" ("id","workspaceId","customerId","createdById","number","currency","subtotal","tax","total","dueAt","items") VALUES (${id},${workspaceId},${typeof body?.customerId === 'string' ? body.customerId : null},${user.id},${number},${currency},${subtotal},${tax},${subtotal + tax},${typeof body?.dueAt === 'string' ? new Date(body.dueAt) : null},${JSON.stringify(items)}::jsonb)`)
+      return NextResponse.json({ id }, { status: 201 })
+    }
+    return NextResponse.json({ error: 'Unsupported business action' }, { status: 400 })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to update business suite'
+    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 400 })
+  }
+}
