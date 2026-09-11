@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { roleHasPermission } from '../lib/permissions'
 import { sanitizeFilename, validateUpload } from '../lib/storage'
 import { canOperateWarehouseShipment } from '../lib/warehouse'
+import { validPaymentSignature } from '../app/api/webhooks/payments/route'
+import { createHmac } from 'node:crypto'
 
 test('permission matrix denies customer global shipment access', () => {
   assert.equal(roleHasPermission('CUSTOMER', 'shipments.read'), false)
@@ -25,6 +27,15 @@ test('warehouse staff can operate only explicitly assigned warehouses', () => {
   assert.equal(canOperateWarehouseShipment(['warehouse-a', 'warehouse-c'], 'warehouse-b'), false)
   assert.equal(canOperateWarehouseShipment([], 'warehouse-a'), false)
   assert.equal(canOperateWarehouseShipment(['warehouse-a'], null), false)
+})
+
+test('payment webhook signature accepts only the exact signed payload', () => {
+  const raw = JSON.stringify({ event: 'payment.succeeded', amount: '100.00' })
+  const secret = 'test-webhook-secret'
+  const signature = createHmac('sha256', secret).update(raw).digest('hex')
+  assert.equal(validPaymentSignature(raw, signature, secret), true)
+  assert.equal(validPaymentSignature(raw + ' ', signature, secret), false)
+  assert.equal(validPaymentSignature(raw, signature.slice(0, -1) + '0', secret), false)
 })
 
 test('document filename sanitization removes path/control characters', () => {
