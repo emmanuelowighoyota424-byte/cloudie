@@ -15,20 +15,14 @@ export async function POST(request: Request) {
     const file = form.get('file')
     const documentType = String(form.get('documentType') || '').trim()
 
-    if (!(file instanceof File) || !documentType) {
-      return NextResponse.json({ error: 'file and documentType are required' }, { status: 400 })
-    }
-    if (!ALLOWED_KYC_TYPES.has(file.type)) {
-      return NextResponse.json({ error: 'KYC documents must be PDF, JPEG, PNG, or WebP' }, { status: 400 })
-    }
-    if (file.size <= 0 || file.size > MAX_KYC_BYTES) {
-      return NextResponse.json({ error: 'KYC document exceeds the 4 MB upload limit' }, { status: 400 })
-    }
+    if (!(file instanceof File) || !documentType) return NextResponse.json({ error: 'file and documentType are required' }, { status: 400 })
+    if (!ALLOWED_KYC_TYPES.has(file.type)) return NextResponse.json({ error: 'KYC documents must be PDF, JPEG, PNG, or WebP' }, { status: 400 })
+    if (file.size <= 0 || file.size > MAX_KYC_BYTES) return NextResponse.json({ error: 'KYC document exceeds the 4 MB upload limit' }, { status: 400 })
 
     validateUpload(file.type, file.size)
     const safeName = sanitizeFilename(file.name)
     const storageKey = `kyc/${user.id}/${crypto.randomUUID()}-${safeName}`
-    const uploaded = await putPrivateObject(storageKey, await file.arrayBuffer(), file.type)
+    await putPrivateObject(storageKey, await file.arrayBuffer(), file.type)
 
     await prisma.auditLog.create({
       data: {
@@ -41,15 +35,10 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({
-      storageKey,
-      originalFilename: safeName,
-      mimeType: file.type,
-      sizeBytes: file.size,
-      url: uploaded.url,
-    }, { status: 201 })
+    return NextResponse.json({ storageKey, originalFilename: safeName, mimeType: file.type, sizeBytes: file.size }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to upload KYC document'
-    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 400 })
+    const status = message.includes('Authentication') ? 401 : message.includes('configured') ? 503 : 400
+    return NextResponse.json({ error: message }, { status })
   }
 }
