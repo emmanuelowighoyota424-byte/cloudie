@@ -1,7 +1,34 @@
 import { execFileSync } from 'node:child_process'
+import { readFileSync, writeFileSync } from 'node:fs'
 import pg from 'pg'
 
 const { Client } = pg
+const RECONCILIATION_SQL = '/tmp/cloudie-production-forward.sql'
+
+function runPrisma(args, env = process.env) {
+  return execFileSync('pnpm', ['exec', 'prisma', ...args], { stdio: 'inherit', env })
+}
+
+function runPrismaCapture(args, env = process.env) {
+  return execFileSync('pnpm', ['exec', 'prisma', ...args], { encoding: 'utf8', env })
+}
+
+function assertSafeReconciliation(sql) {
+  const normalized = sql.replace(/--.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '')
+  const forbidden = [
+    /\bDROP\s+TABLE\b/i,
+    /\bDROP\s+COLUMN\b/i,
+    /\bTRUNCATE\b/i,
+    /\bDELETE\s+FROM\b/i,
+    /\bDROP\s+TYPE\b/i,
+    /\bALTER\s+TYPE[\s\S]*\bDROP\s+VALUE\b/i,
+    /\bDROP\s+INDEX\b/i,
+  ]
+  const matched = forbidden.find((pattern) => pattern.test(normalized))
+  if (matched) {
+    throw new Error(`Production schema reconciliation contains a destructive SQL operation (${matched}). Refusing automatic migration.`)
+  }
+}
 
 async function main() {
   if (process.env.VERCEL !== '1') return
@@ -18,21 +45,41 @@ async function main() {
   }
 
   if (!migrationHistoryPresent) {
-    console.log('No Prisma migration history found. Verifying the existing production schema matches Prisma before baselining.')
+    console.log('No Prisma migration history found. Comparing the live production schema with prisma/schema.prisma.')
+    let diffStatus = 0
     try {
-      execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'diff', '--from-url', process.env.DATABASE_URL, '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'], { stdio: 'inherit', env: process.env })
+      runPrisma(['migrate', 'diff', '--from-url', process.env.DATABASE_URL, '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'])
     } catch (error) {
-      const code = typeof error?.status === 'number' ? error.status : 1
-      if (code === 2) throw new Error('Production database schema differs from prisma/schema.prisma; refusing to baseline automatically.')
-      throw error
+      diffStatus = typeof error?.status === 'number' ? error.status : 1
+      if (diffStatus !== 2) throw error
     }
-    execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'resolve', '--applied', '0_init'], { stdio: 'inherit', env: process.env })
-    console.log('Production database successfully baselined as 0_init without modifying existing data.')
+
+    if (diffStatus === 2) {
+      console.log('Production schema differs from Prisma. Generating a forward reconciliation script for safety review.')
+      const sql = runPrismaCapture(['migrate', 'diff', '--from-url', process.env.DATABASE_URL, '--to-schema-datamodel', 'prisma/schema.prisma', '--script'])
+      assertSafeReconciliation(sql)
+      if (sql.trim()) {
+        writeFileSync(RECONCILIATION_SQL, sql, 'utf8')
+        runPrisma(['db', 'execute', '--url', process.env.DATABASE_URL, '--file', RECONCILIATION_SQL])
+      }
+
+      let verifyStatus = 0
+      try {
+        runPrisma(['migrate', 'diff', '--from-url', process.env.DATABASE_URL, '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'])
+      } catch (error) {
+        verifyStatus = typeof error?.status === 'number' ? error.status : 1
+      }
+      if (verifyStatus !== 0) throw new Error('Production schema reconciliation did not converge to prisma/schema.prisma; refusing to baseline.')
+    }
+
+    runPrisma(['migrate', 'resolve', '--applied', '0_init'])
+    console.log('Production database baseline recorded as 0_init after schema verification/reconciliation.')
   } else {
     console.log('Prisma migration history already exists; skipping baseline resolution.')
   }
 
-  execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'deploy'], { stdio: 'inherit', env: process.env })
+  runPrisma(['migrate', 'deploy'])
+  runPrisma(['migrate', 'status'])
 }
 
 main().catch((error) => {
