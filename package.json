@@ -9,15 +9,14 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/**/*.test.ts",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev --name init",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:migrate": "prisma migrate dev --name init"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@prisma/client": "^6.19.3",
     "@vercel/analytics": "1.6.1",
     "better-auth": "^1.7.2",
-    "class-variance-authority": "0.7.1",
+    "class-variance-authority": "^0.7.1",
     "clsx": "2.1.1",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.16.0",
