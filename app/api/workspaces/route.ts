@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/authorization'
-
-const createSchema = z.object({
-  name: z.string().trim().min(2).max(80),
-})
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'workspace'
@@ -36,10 +31,11 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const user = await requireUser()
-    const parsed = createSchema.safeParse(await request.json())
-    if (!parsed.success) return NextResponse.json({ error: 'Invalid workspace name' }, { status: 400 })
+    const body = await request.json().catch(() => null)
+    const name = typeof body?.name === 'string' ? body.name.trim() : ''
+    if (name.length < 2 || name.length > 80) return NextResponse.json({ error: 'Invalid workspace name' }, { status: 400 })
 
-    const baseSlug = slugify(parsed.data.name)
+    const baseSlug = slugify(name)
     const workspace = await prisma.$transaction(async (tx) => {
       let slug = baseSlug
       for (let attempt = 0; attempt < 5; attempt++) {
@@ -50,7 +46,7 @@ export async function POST(request: Request) {
 
       const created = await tx.workspace.create({
         data: {
-          name: parsed.data.name,
+          name,
           slug,
           ownerId: user.id,
           members: { create: { userId: user.id, role: 'WORKSPACE_ADMIN' } },
