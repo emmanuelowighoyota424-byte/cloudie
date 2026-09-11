@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireWorkspaceRole } from '@/lib/authorization'
 import { canTransitionShipment } from '@/lib/shipment'
+import { canOperateWarehouseShipment } from '@/lib/warehouse'
 import { notifyShipmentUsers } from '@/lib/notifications'
 
 export async function GET(_: Request, context: { params: Promise<{ workspaceId: string }> }) {
@@ -27,10 +28,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ works
     const shipmentId = typeof body?.shipmentId === 'string' ? body.shipmentId : null
     const action = typeof body?.action === 'string' ? body.action : null
     if (!shipmentId || !['RECEIVE', 'DISPATCH'].includes(action ?? '')) return NextResponse.json({ error: 'shipmentId and action RECEIVE|DISPATCH are required' }, { status: 400 })
-    const assignment = await prisma.warehouseStaffAssignment.findFirst({ where: { workspaceId, userId: user.id, warehouse: { status: 'ACTIVE' } }, select: { warehouseId: true } })
-    if (!assignment) return NextResponse.json({ error: 'No active warehouse assignment' }, { status: 403 })
-    const shipment = await prisma.shipment.findFirst({ where: { id: shipmentId, workspaceId, warehouseId: assignment.warehouseId }, include: { warehouse: true } })
-    if (!shipment) return NextResponse.json({ error: 'Shipment is not assigned to your warehouse' }, { status: 403 })
+    const assignments = await prisma.warehouseStaffAssignment.findMany({ where: { workspaceId, userId: user.id, warehouse: { status: 'ACTIVE' } }, select: { warehouseId: true } })
+    const assignedWarehouseIds = assignments.map((assignment) => assignment.warehouseId)
+    if (!assignedWarehouseIds.length) return NextResponse.json({ error: 'No active warehouse assignment' }, { status: 403 })
+    const shipment = await prisma.shipment.findFirst({ where: { id: shipmentId, workspaceId }, include: { warehouse: true } })
+    if (!shipment || !canOperateWarehouseShipment(assignedWarehouseIds, shipment.warehouseId)) return NextResponse.json({ error: 'Shipment is not assigned to your warehouse' }, { status: 403 })
     const nextStatus = action === 'DISPATCH' ? 'IN_TRANSIT' : shipment.status
     if (action === 'DISPATCH' && !canTransitionShipment(shipment.status, 'IN_TRANSIT')) return NextResponse.json({ error: `Shipment cannot be dispatched from ${shipment.status}` }, { status: 409 })
     const note = action === 'RECEIVE' ? 'Shipment received at warehouse' : 'Shipment dispatched from warehouse'
