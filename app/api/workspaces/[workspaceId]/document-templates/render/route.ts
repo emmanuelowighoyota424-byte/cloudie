@@ -11,10 +11,11 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
   try {
     const { workspaceId } = await context.params
     const { user } = await requireWorkspaceMember(workspaceId)
-    const body = await request.json().catch(() => null) as Record<string, unknown> | null
-    const templateId = typeof body?.templateId === 'string' ? body.templateId : ''
-    const version = Number.isInteger(body?.version) ? Number(body.version) : null
-    const idempotencyKey = request.headers.get('Idempotency-Key')?.trim() || (typeof body?.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '')
+    const parsed = await request.json().catch(() => null)
+    const body = (parsed && typeof parsed === 'object' ? parsed : {}) as Record<string, unknown>
+    const templateId = typeof body.templateId === 'string' ? body.templateId : ''
+    const version = Number.isInteger(body.version) ? Number(body.version) : null
+    const idempotencyKey = request.headers.get('Idempotency-Key')?.trim() || (typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '')
     if (!templateId || !idempotencyKey) return NextResponse.json({ error: 'templateId and Idempotency-Key are required' }, { status: 400 })
     const existing = await prisma.$queryRaw<Array<{ id: string; status: string; storageKey: string | null; metadata: any }>>(Prisma.sql`SELECT "id","status","storageKey","metadata" FROM "RenderedDocument" WHERE "workspaceId"=${workspaceId} AND "idempotencyKey"=${idempotencyKey} LIMIT 1`)
     if (existing[0]) return NextResponse.json({ renderedDocument: existing[0], replay: true })
