@@ -27,11 +27,11 @@ async function authorizedDocument(workspaceId: string, documentId: string) {
   return { user, membership, document }
 }
 
-export async function GET(_: Request, context: { params: Promise<{ workspaceId: string; documentId: string }> }) {
+export async function GET(request: Request, context: { params: Promise<{ workspaceId: string; documentId: string }> }) {
   try {
     const { workspaceId, documentId } = await context.params
     const { user, document } = await authorizedDocument(workspaceId, documentId)
-    const response = await getPrivateObject(document.storageKey)
+    const response = await getPrivateObject(document.storageKey, request.headers.get('x-vercel-oidc-token'))
     await prisma.documentAccess.create({ data: { documentId, userId: user.id, action: 'READ' } })
     return new Response(response.body, { status: 200, headers: { 'content-type': document.mimeType, 'content-disposition': `inline; filename="${document.name.replace(/"/g, '')}"`, 'cache-control': 'private, no-store' } })
   } catch (error) {
@@ -40,12 +40,12 @@ export async function GET(_: Request, context: { params: Promise<{ workspaceId: 
   }
 }
 
-export async function DELETE(_: Request, context: { params: Promise<{ workspaceId: string; documentId: string }> }) {
+export async function DELETE(request: Request, context: { params: Promise<{ workspaceId: string; documentId: string }> }) {
   try {
     const { workspaceId, documentId } = await context.params
     const { user, membership, document } = await authorizedDocument(workspaceId, documentId)
     if (!['SUPER_ADMIN', 'WORKSPACE_ADMIN', 'MANAGER'].includes(membership.role)) return NextResponse.json({ error: 'Insufficient workspace permissions' }, { status: 403 })
-    await deletePrivateObject(document.storageKey)
+    await deletePrivateObject(document.storageKey, request.headers.get('x-vercel-oidc-token'))
     await prisma.$transaction(async (tx) => {
       await tx.documentAccess.create({ data: { documentId, userId: user.id, action: 'DELETE' } })
       await tx.auditLog.create({ data: { actorId: user.id, userId: user.id, workspaceId, action: 'document.deleted', entity: 'Document', entityId: documentId } })
