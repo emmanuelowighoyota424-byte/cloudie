@@ -4,6 +4,7 @@ import pg from 'pg'
 const { Client } = pg
 
 async function main() {
+  if (process.env.VERCEL !== '1') return
   if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required for production migration preparation')
   const client = new Client({ connectionString: process.env.DATABASE_URL })
   await client.connect()
