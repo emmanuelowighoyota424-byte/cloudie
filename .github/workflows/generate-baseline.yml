@@ -16,6 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check baseline
         id: baseline
+        continue-on-error: true
         run: test -f prisma/migrations/0_init/migration.sql
       - uses: pnpm/action-setup@v4
         if: steps.baseline.outcome == 'failure'
