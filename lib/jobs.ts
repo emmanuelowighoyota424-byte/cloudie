@@ -16,7 +16,7 @@ export async function enqueueEmail(input: { to: string; subject: string; templat
 }
 
 export async function processDueJobs(limit = 10) {
-  const jobs = await prisma.$queryRaw<Array<{ id: string; type: string; payload: { emailId?: string }; attempts: number; maxAttempts: number }>>(Prisma.sql`UPDATE "CloudieJob" SET "status"='PROCESSING',"startedAt"=CURRENT_TIMESTAMP,"attempts"="attempts"+1,"updatedAt"=CURRENT_TIMESTAMP WHERE "id" IN (SELECT "id" FROM "CloudieJob" WHERE "status" IN ('PENDING','RETRY') AND "runAt"<=CURRENT_TIMESTAMP ORDER BY "runAt" ASC LIMIT ${limit} FOR UPDATE SKIP LOCKED) RETURNING *`)
+  const jobs = await prisma.$queryRaw<Array<{ id: string; type: string; payload: { emailId?: string; campaignId?: string }; attempts: number; maxAttempts: number }>>(Prisma.sql`UPDATE "CloudieJob" SET "status"='PROCESSING',"startedAt"=CURRENT_TIMESTAMP,"attempts"="attempts"+1,"updatedAt"=CURRENT_TIMESTAMP WHERE "id" IN (SELECT "id" FROM "CloudieJob" WHERE "status" IN ('PENDING','RETRY') AND "runAt"<=CURRENT_TIMESTAMP ORDER BY "runAt" ASC LIMIT ${limit} FOR UPDATE SKIP LOCKED) RETURNING *`)
   let processed = 0
   for (const job of jobs) {
     try {
@@ -28,6 +28,20 @@ export async function processDueJobs(limit = 10) {
         const text = typeof email.payload.text === 'string' ? email.payload.text : String(email.payload.message ?? '')
         await sendEmail({ to: email.recipient, subject: email.subject, html, text })
         await prisma.$executeRaw(Prisma.sql`UPDATE "EmailMessage" SET "status"='SENT',"sentAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${email.id}`)
+      } else if (job.type === 'campaign.send' && job.payload.campaignId) {
+        const rows = await prisma.$queryRaw<Array<{ id: string; workspaceId: string; subject: string; template: string; audience: string[]; status: string }>>(Prisma.sql`SELECT "id","workspaceId","subject","template","audience","status" FROM "EmailCampaign" WHERE "id"=${job.payload.campaignId} LIMIT 1`)
+        const campaign = rows[0]
+        if (!campaign || ['SENT','CANCELLED'].includes(campaign.status)) throw new Error('Campaign is unavailable')
+        await prisma.$executeRaw(Prisma.sql`UPDATE "EmailCampaign" SET "status"='PROCESSING',"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${campaign.id}`)
+        let failed = 0
+        for (const recipient of campaign.audience) {
+          try {
+            await enqueueEmail({ to: recipient, subject: campaign.subject, template: campaign.template, payload: { text: campaign.template }, workspaceId: campaign.workspaceId, idempotencyKey: `campaign-email:${campaign.id}:${recipient}` })
+          } catch { failed++ }
+        }
+        await prisma.$executeRaw(Prisma.sql`UPDATE "EmailCampaign" SET "status"='SENT',"sentCount"="sentCount"+${campaign.audience.length - failed},"failedCount"="failedCount"+${failed},"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${campaign.id}`)
+      } else {
+        throw new Error(`Unsupported job type: ${job.type}`)
       }
       await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"='COMPLETED',"finishedAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`)
       processed++
