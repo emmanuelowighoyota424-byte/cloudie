@@ -61,7 +61,8 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
 
     const safeName = sanitizeFilename(file.name)
     const storageKey = `workspaces/${workspaceId}/documents/${crypto.randomUUID()}-${safeName}`
-    const blob = await putPrivateObject(storageKey, await file.arrayBuffer(), file.type)
+    const oidcToken = request.headers.get('x-vercel-oidc-token')
+    const blob = await putPrivateObject(storageKey, await file.arrayBuffer(), file.type, oidcToken)
     const document = await prisma.$transaction(async (tx) => {
       const created = await tx.document.create({
         data: { workspaceId, ownerId: user.id, shipmentId, customerId: customerId ?? shipment?.customerId ?? null, name: safeName, mimeType: file.type, sizeBytes: BigInt(file.size), storageKey: blob.url, versions: { create: { version: 1, storageKey: blob.url, sizeBytes: BigInt(file.size), checksum: blob.etag } } },
