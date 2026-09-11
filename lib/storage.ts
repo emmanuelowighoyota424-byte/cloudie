@@ -34,17 +34,17 @@ function storeIdFromReadWriteToken(value: string) {
   return storeId
 }
 
-function resolveAuth(oidcToken?: string | null) {
+function resolveAuth() {
   const bearer = readWriteToken()
   if (bearer) return { bearer, storeId: storeIdFromReadWriteToken(bearer) }
-  const token = oidcToken?.trim()
+  const oidcToken = process.env.VERCEL_OIDC_TOKEN?.trim()
   const storeId = oidcStoreId()
-  if (token && storeId) return { bearer: token, storeId }
+  if (oidcToken && storeId) return { bearer: oidcToken, storeId }
   throw new StorageConfigurationError('Vercel Blob credentials are not configured')
 }
 
-export async function putPrivateObject(pathname: string, body: ArrayBuffer, contentType: string, oidcToken?: string | null) {
-  const { bearer, storeId } = resolveAuth(oidcToken)
+export async function putPrivateObject(pathname: string, body: ArrayBuffer, contentType: string) {
+  const { bearer, storeId } = resolveAuth()
   const response = await fetch(`${BLOB_API}/?pathname=${encodeURIComponent(pathname)}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${bearer}`, 'x-vercel-blob-store-id': storeId, 'x-api-version': '12', 'x-content-type': contentType, 'x-content-length': String(body.byteLength), 'x-add-random-suffix': '0' },
@@ -54,15 +54,15 @@ export async function putPrivateObject(pathname: string, body: ArrayBuffer, cont
   return (await response.json()) as { pathname: string; url: string; downloadUrl?: string; etag?: string; contentType?: string }
 }
 
-export async function getPrivateObject(pathname: string, oidcToken?: string | null) {
-  const { bearer, storeId } = resolveAuth(oidcToken)
+export async function getPrivateObject(pathname: string) {
+  const { bearer, storeId } = resolveAuth()
   const response = await fetch(`https://${storeId}.private.blob.vercel-storage.com/${pathname}`, { headers: { authorization: `Bearer ${bearer}` }, cache: 'no-store' })
   if (!response.ok) throw new Error(response.status === 404 ? 'Document not found in storage' : `Storage read failed (${response.status})`)
   return response
 }
 
-export async function deletePrivateObject(url: string, oidcToken?: string | null) {
-  const { bearer } = resolveAuth(oidcToken)
+export async function deletePrivateObject(url: string) {
+  const { bearer } = resolveAuth()
   const response = await fetch(`${BLOB_API}/delete`, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', 'x-api-version': '12' }, body: JSON.stringify({ urls: [url] }) })
   if (!response.ok) throw new Error(`Storage deletion failed (${response.status})`)
 }
