@@ -1,19 +1,29 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { requireUser } from '@/lib/authorization'
 import { deletePrivateObject, getPrivateObject } from '@/lib/storage'
+import { requireUser } from '@/lib/authorization'
 
 async function authorizedDocument(workspaceId: string, documentId: string) {
   const user = await requireUser()
   const membership = await prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId: user.id } } })
   if (!membership || membership.status !== 'ACTIVE') throw new Error('Workspace access denied')
-  const document = await prisma.document.findFirst({ where: { id: documentId, workspaceId }, include: { shipment: { select: { driver: { select: { userId: true } } } }, customer: { select: { email: true } } } })
+  const document = await prisma.document.findFirst({
+    where: { id: documentId, workspaceId },
+    include: {
+      shipment: { select: { customer: { select: { email: true } }, driver: { select: { userId: true } }, warehouseId: true } },
+      customer: { select: { email: true } },
+    },
+  })
   if (!document) throw new Error('Document not found')
-  const privileged = ['SUPER_ADMIN', 'WORKSPACE_ADMIN', 'MANAGER', 'STAFF', 'WAREHOUSE_STAFF'].includes(membership.role)
+  const privileged = ['SUPER_ADMIN', 'WORKSPACE_ADMIN', 'MANAGER', 'STAFF'].includes(membership.role)
   const isOwner = document.ownerId === user.id
-  const isDriver = document.shipment?.driver?.userId === user.id
-  const isCustomer = membership.role === 'CUSTOMER' && document.customer?.email?.toLowerCase() === user.email.toLowerCase()
-  if (!privileged && !isOwner && !isDriver && !isCustomer) throw new Error('Document access denied')
+  const isDriver = membership.role === 'DRIVER' && document.shipment?.driver?.userId === user.id
+  const isWarehouseStaff = membership.role === 'WAREHOUSE_STAFF' && document.shipment?.warehouseId
+    ? Boolean(await prisma.warehouseStaffAssignment.findFirst({ where: { workspaceId, userId: user.id, warehouseId: document.shipment.warehouseId } }))
+    : false
+  const customerEmail = document.customer?.email ?? document.shipment?.customer?.email
+  const isCustomer = membership.role === 'CUSTOMER' && customerEmail?.toLowerCase() === user.email.toLowerCase()
+  if (!privileged && !isOwner && !isDriver && !isWarehouseStaff && !isCustomer) throw new Error('Document access denied')
   return { user, membership, document }
 }
 
