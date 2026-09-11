@@ -5,8 +5,11 @@ export const dynamic = 'force-dynamic'
 
 export default async function TrackingPage({ params }: { params: Promise<{ trackingNumber: string }> }) {
   const { trackingNumber } = await params
+  const normalized = trackingNumber.trim().toUpperCase()
+  if (!/^CLD-[0-9A-F]{10}$/.test(normalized)) notFound()
+
   const shipment = await prisma.shipment.findUnique({
-    where: { trackingId: trackingNumber.toUpperCase() },
+    where: { trackingId: normalized },
     select: {
       trackingId: true,
       status: true,
