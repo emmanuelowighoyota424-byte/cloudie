@@ -128,7 +128,7 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String
   userId String
   role WorkspaceRole
@@ -143,7 +143,7 @@ model WorkspaceMember {
 }
 
 model WorkspaceInvitation {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String
   email String
   role WorkspaceRole
@@ -262,7 +262,7 @@ model WarehouseStaffAssignment {
 }
 
 model ProofOfDelivery {
-  id String @id
+  id String @id @default(cuid())
   shipmentId String @unique
   recipient String
   signatureUrl String?
@@ -273,7 +273,7 @@ model ProofOfDelivery {
 }
 
 model Document {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String
   ownerId String
   shipmentId String?
@@ -310,7 +310,7 @@ model DocumentVersion {
 }
 
 model DocumentShare {
-  id String @id
+  id String @id @default(cuid())
   documentId String
   userId String
   expiresAt DateTime?
@@ -323,7 +323,7 @@ model DocumentShare {
 }
 
 model DocumentAccess {
-  id String @id
+  id String @id @default(cuid())
   documentId String
   userId String?
   action String
@@ -334,7 +334,7 @@ model DocumentAccess {
 }
 
 model Vendor {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String
   name String
   category String
@@ -347,7 +347,7 @@ model Vendor {
 }
 
 model Product {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String
   vendorId String?
   name String
@@ -366,7 +366,7 @@ model Product {
 }
 
 model Order {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String
   customerId String?
   userId String?
@@ -389,7 +389,7 @@ model Order {
 }
 
 model OrderItem {
-  id String @id
+  id String @id @default(cuid())
   orderId String
   productId String
   quantity Int
@@ -401,7 +401,7 @@ model OrderItem {
 }
 
 model Payment {
-  id String @id
+  id String @id @default(cuid())
   orderId String
   provider String
   providerReference String?
@@ -440,7 +440,7 @@ model Subscription {
 }
 
 model Notification {
-  id String @id
+  id String @id @default(cuid())
   userId String
   workspaceId String?
   title String
@@ -455,7 +455,7 @@ model Notification {
 }
 
 model Referral {
-  id String @id
+  id String @id @default(cuid())
   userId String
   referredEmail String
   reward Int @default(0)
@@ -465,7 +465,7 @@ model Referral {
 }
 
 model AuditLog {
-  id String @id
+  id String @id @default(cuid())
   userId String?
   actorId String?
   workspaceId String?
