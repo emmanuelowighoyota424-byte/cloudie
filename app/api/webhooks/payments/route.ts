@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notifications'
 
-function validSignature(raw: string, signature: string, secret: string) {
+export function validPaymentSignature(raw: string, signature: string, secret: string) {
   const expected = createHmac('sha256', secret).update(raw).digest('hex')
   const a = Buffer.from(signature.trim(), 'utf8')
   const b = Buffer.from(expected, 'utf8')
@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const signature = request.headers.get('x-payment-signature')
   const provider = request.headers.get('x-payment-provider')?.trim().slice(0, 64)
   const eventId = request.headers.get('x-payment-event-id')?.trim().slice(0, 128)
-  if (!signature || !provider || !eventId || !validSignature(raw, signature, secret)) return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
+  if (!signature || !provider || !eventId || !validPaymentSignature(raw, signature, secret)) return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 })
   let payload: Record<string, unknown>
   try { payload = JSON.parse(raw) as Record<string, unknown> } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
