@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/authorization'
 
 function hashToken(token: string) {
@@ -23,12 +22,18 @@ export async function POST(_: Request, context: { params: Promise<{ token: strin
     if (user.email.toLowerCase() !== invitation.email.toLowerCase()) return NextResponse.json({ error: 'Invitation email does not match the signed-in account' }, { status: 403 })
 
     const result = await prisma.$transaction(async (tx) => {
+      const now = new Date()
+      const claimed = await tx.workspaceInvitation.updateMany({
+        where: { id: invitation.id, status: 'PENDING', expiresAt: { gt: now } },
+        data: { status: 'ACCEPTED', acceptedById: user.id, acceptedAt: now },
+      })
+      if (claimed.count !== 1) throw new Error('Invitation is no longer active')
+
       const membership = await tx.workspaceMember.upsert({
         where: { workspaceId_userId: { workspaceId: invitation.workspaceId, userId: user.id } },
         create: { workspaceId: invitation.workspaceId, userId: user.id, role: invitation.role },
         update: { status: 'ACTIVE', role: invitation.role },
       })
-      await tx.workspaceInvitation.update({ where: { id: invitation.id }, data: { status: 'ACCEPTED', acceptedById: user.id, acceptedAt: new Date() } })
       await tx.auditLog.create({
         data: { actorId: user.id, userId: user.id, workspaceId: invitation.workspaceId, action: 'workspace.invitation_accepted', entity: 'WorkspaceInvitation', entityId: invitation.id, result: 'SUCCESS' },
       })
@@ -38,7 +43,7 @@ export async function POST(_: Request, context: { params: Promise<{ token: strin
     return NextResponse.json({ membership: { id: result.id, workspaceId: result.workspaceId, role: result.role } })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to accept invitation'
-    const status = message.includes('Authentication') ? 401 : 500
+    const status = message.includes('Authentication') ? 401 : message.includes('no longer active') ? 409 : 500
     return NextResponse.json({ error: message }, { status })
   }
 }
