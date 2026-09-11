@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   try { payload = JSON.parse(raw) as Record<string, unknown> } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   try {
-    const webhook = await prisma.webhookEvent.create({ data: { provider, eventId, payload } }).catch((error) => {
+    const webhook = await prisma.webhookEvent.create({ data: { provider, eventId, payload: payload as Prisma.InputJsonValue } }).catch((error) => {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return null
       throw error
     })
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       const order = await tx.order.findUnique({ where: { id: orderId }, include: { payments: true } })
       if (!order) throw new Error('Order not found')
-      if (order.total.compare(amount) !== 0) throw new Error('Payment amount mismatch')
+      if (order.total.toString() !== amount.toString()) throw new Error('Payment amount mismatch')
       const existingPayment = order.payments.find((payment) => payment.provider === provider && payment.providerReference === providerReference)
       const payment = existingPayment
         ? await tx.payment.update({ where: { id: existingPayment.id }, data: { status, verifiedAt: status === 'PAID' ? new Date() : undefined } })
