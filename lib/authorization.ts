@@ -1,7 +1,8 @@
 import { headers } from 'next/headers'
+import { WorkspaceRole } from '@prisma/client'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { WorkspaceRole } from '@prisma/client'
+import { Permission, roleHasPermission } from '@/lib/permissions'
 
 export class AuthorizationError extends Error {
   constructor(message = 'Forbidden') {
@@ -36,8 +37,10 @@ export async function requireWorkspaceRole(workspaceId: string, roles: Workspace
   return { user, membership }
 }
 
-export async function requirePermission(workspaceId: string, roles: WorkspaceRole | WorkspaceRole[]) {
-  return requireWorkspaceRole(workspaceId, roles)
+export async function requirePermission(workspaceId: string, permission: Permission) {
+  const { user, membership } = await requireWorkspaceMember(workspaceId)
+  if (!roleHasPermission(membership.role, permission)) throw new AuthorizationError('Insufficient workspace permissions')
+  return { user, membership }
 }
 
 export async function requireSuperAdmin() {
