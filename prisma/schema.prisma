@@ -75,17 +75,16 @@ model User {
   updatedAt             DateTime              @updatedAt
   pointLedger           PointLedger[]
   shipmentsCreated      Shipment[]            @relation("ShipmentCreator")
-  assignedShipments     Shipment[]            @relation("ShipmentDriver")
   notifications         Notification[]
   referrals             Referral[]
   auditLogs             AuditLog[]            @relation("AuditUser")
   auditActorLogs        AuditLog[]            @relation("AuditActor")
   kycVerifications      KYCVerification[]
   workspaceMembers      WorkspaceMember[]
-  ownedWorkspaces       Workspace[]            @relation("WorkspaceOwner")
-  invitationsSent       WorkspaceInvitation[]  @relation("InvitationInviter")
-  invitationsAccepted   WorkspaceInvitation[]  @relation("InvitationAcceptor")
-  documents             Document[]             @relation("DocumentOwner")
+  ownedWorkspaces       Workspace[]           @relation("WorkspaceOwner")
+  invitationsSent       WorkspaceInvitation[] @relation("InvitationInviter")
+  invitationsAccepted   WorkspaceInvitation[] @relation("InvitationAcceptor")
+  documents             Document[]            @relation("DocumentOwner")
   documentShares        DocumentShare[]
   documentAccesses      DocumentAccess[]
   drivers               Driver[]
@@ -133,15 +132,15 @@ model Workspace {
 }
 
 model WorkspaceMember {
-  id          String                @id @default(cuid())
+  id          String               @id @default(cuid())
   workspaceId String
   userId      String
   role        WorkspaceRole
-  status      WorkspaceMemberStatus  @default(ACTIVE)
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
-  workspace   Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status      WorkspaceMemberStatus @default(ACTIVE)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  workspace   Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@unique([workspaceId, userId])
   @@index([userId, status])
   @@index([workspaceId, role])
