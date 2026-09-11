@@ -1,13 +1,16 @@
 {
-  "name": "my-project",
-  "version": "0.1.0",
+  "name": "cloudie",
+  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/**/*.test.ts",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev --name init",
+    "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
