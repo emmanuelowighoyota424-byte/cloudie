@@ -27,6 +27,12 @@ enum ShipmentStatus {
   CANCELLED
 }
 
+enum PointEntryType {
+  CREDIT
+  DEBIT
+  ADJUSTMENT
+}
+
 model User {
   id                String             @id @default(cuid())
   name              String
@@ -39,6 +45,7 @@ model User {
   sessions          Session[]
   accounts          Account[]
   memberships       WorkspaceMembership[]
+  pointAccounts     PointAccount[]
   pointLedger       PointLedger[]
   shipments         Shipment[]
   notifications     Notification[]
@@ -90,16 +97,17 @@ model Verification {
 }
 
 model Workspace {
-  id          String                @id @default(cuid())
-  name        String
-  slug        String                @unique
-  createdAt   DateTime              @default(now())
-  updatedAt   DateTime              @updatedAt
+  id           String                @id @default(cuid())
+  name         String
+  slug         String                @unique
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
   memberships WorkspaceMembership[]
-  shipments   Shipment[]
-  pointLedger PointLedger[]
-  vendors     Vendor[]
-  auditLogs   AuditLog[]
+  shipments    Shipment[]
+  pointAccounts PointAccount[]
+  pointLedger  PointLedger[]
+  vendors      Vendor[]
+  auditLogs    AuditLog[]
 }
 
 model WorkspaceMembership {
@@ -115,21 +123,40 @@ model WorkspaceMembership {
   @@index([userId])
 }
 
+model PointAccount {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  balance     Int       @default(0)
+  version     Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ledger      PointLedger[]
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
 model PointLedger {
-  id            String    @id @default(cuid())
-  userId        String
-  workspaceId   String?
-  amount        Int
-  balance       Int
-  description   String
-  reference     String?
-  idempotencyKey String?
-  createdAt     DateTime  @default(now())
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  id             String         @id @default(cuid())
+  userId         String
+  workspaceId    String
+  pointAccountId String
+  type           PointEntryType
+  amount         Int
+  balance        Int
+  description    String
+  reference      String?
+  idempotencyKey String
+  createdAt      DateTime       @default(now())
+  user          User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  pointAccount  PointAccount @relation(fields: [pointAccountId], references: [id], onDelete: Restrict)
+  @@unique([workspaceId, idempotencyKey])
   @@index([userId, createdAt])
   @@index([workspaceId, createdAt])
-  @@unique([workspaceId, idempotencyKey])
+  @@index([pointAccountId, createdAt])
 }
 
 model Shipment {
@@ -183,13 +210,13 @@ model Notification {
 }
 
 model Referral {
-  id           String   @id @default(cuid())
-  userId       String
+  id            String   @id @default(cuid())
+  userId        String
   referredEmail String
-  reward       Int      @default(0)
-  status       String   @default("PENDING")
-  createdAt    DateTime @default(now())
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reward        Int      @default(0)
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, createdAt])
 }
 
