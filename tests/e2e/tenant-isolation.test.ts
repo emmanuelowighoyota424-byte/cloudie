@@ -53,7 +53,7 @@ before(async () => {
   await prisma.warehouseStaffAssignment.create({ data: { workspaceId: workspaceB.id, warehouseId: warehouseB.id, userId: users[7].id } })
   const shipment = await prisma.shipment.create({ data: { workspaceId: workspaceB.id, trackingId: `CLD-E2E-${Date.now()}`, creatorId: users[1].id, customerId: customerB.id, driverId: driverB.id, warehouseId: warehouseB.id, origin: 'E2E Origin B', destination: 'E2E Destination B', status: 'CONFIRMED' } })
   shipmentB = { id: shipment.id }
-  documentB = await prisma.document.create({ data: { workspaceId: workspaceB.id, ownerId: users[1].id, shipmentId: shipment.id, customerId: customerB.id, name: 'private-b.pdf', mimeType: 'application/pdf', sizeBytes: 1n, storageKey: 'e2e/nonexistent-private-b.pdf' } })
+  documentB = await prisma.document.create({ data: { workspaceId: workspaceB.id, ownerId: users[1].id, shipmentId: shipment.id, customerId: customerB.id, name: 'private-b.pdf', mimeType: 'application/pdf', sizeBytes: BigInt(1), storageKey: 'e2e/nonexistent-private-b.pdf' } })
   const productB = await prisma.product.create({ data: { workspaceId: workspaceB.id, name: 'E2E Product B', sku: `E2E-${Date.now()}`, price: 10, stock: 10, active: true } })
   await prisma.order.create({ data: { workspaceId: workspaceB.id, userId: users[3].id, customerId: customerB.id, status: 'PENDING', paymentStatus: 'PENDING', subtotal: 10, total: 10, commission: 0, idempotencyKey: `${prefix}-order`, items: { create: [{ productId: productB.id, quantity: 1, unitPrice: 10 }] } } })
   await prisma.notification.create({ data: { workspaceId: workspaceB.id, userId: users[1].id, title: 'E2E B', message: 'private B' } })
