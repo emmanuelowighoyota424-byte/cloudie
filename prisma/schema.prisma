@@ -13,6 +13,13 @@ enum UserRole {
   SUPER_ADMIN
 }
 
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
 enum ShipmentStatus {
   PENDING
   IN_TRANSIT
@@ -20,49 +27,154 @@ enum ShipmentStatus {
   CANCELLED
 }
 
+enum PointEntryType {
+  CREDIT
+  DEBIT
+  ADJUSTMENT
+}
+
 model User {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  name            String
-  passwordHash    String?
-  role            UserRole         @default(USER)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
-  pointLedger     PointLedger[]
-  shipments       Shipment[]
-  notifications   Notification[]
-  referrals       Referral[]
-  auditLogs       AuditLog[]
-  kycVerifications KYCVerification[]
-  accounts        Account[]
-  sessions        Session[]
+  id                String             @id @default(cuid())
+  name              String
+  email             String             @unique
+  emailVerified     Boolean            @default(false)
+  image             String?
+  role              UserRole           @default(USER)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  sessions          Session[]
+  accounts          Account[]
+  memberships       WorkspaceMembership[]
+  pointAccounts     PointAccount[]
+  pointLedger       PointLedger[]
+  shipments         Shipment[]
+  notifications     Notification[]
+  referrals         Referral[]
+  auditLogs         AuditLog[]
+  kycVerifications  KYCVerification[]
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  expiresAt  DateTime
+  token      String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  ipAddress  String?
+  userAgent  String?
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  idToken               String?   @db.Text
+  password              String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String   @db.Text
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  @@index([identifier])
+}
+
+model Workspace {
+  id           String                @id @default(cuid())
+  name         String
+  slug         String                @unique
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  memberships WorkspaceMembership[]
+  shipments    Shipment[]
+  pointAccounts PointAccount[]
+  pointLedger  PointLedger[]
+  vendors      Vendor[]
+  auditLogs    AuditLog[]
+}
+
+model WorkspaceMembership {
+  id          String         @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        MembershipRole @default(MEMBER)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model PointAccount {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  balance     Int       @default(0)
+  version     Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ledger      PointLedger[]
+  @@unique([workspaceId, userId])
+  @@index([userId])
 }
 
 model PointLedger {
-  id          String   @id @default(cuid())
-  userId      String
-  amount      Int
-  balance     Int
-  description String
-  reference   String?
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id             String         @id @default(cuid())
+  userId         String
+  workspaceId    String
+  pointAccountId String
+  type           PointEntryType
+  amount         Int
+  balance        Int
+  description    String
+  reference      String?
+  idempotencyKey String
+  createdAt      DateTime       @default(now())
+  user          User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  pointAccount  PointAccount @relation(fields: [pointAccountId], references: [id], onDelete: Restrict)
+  @@unique([workspaceId, idempotencyKey])
   @@index([userId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@index([pointAccountId, createdAt])
 }
 
 model Shipment {
-  id          String         @id @default(cuid())
-  trackingId  String         @unique
+  id          String          @id @default(cuid())
+  trackingId  String          @unique
   userId      String
+  workspaceId String?
   customer    String
   origin      String
   destination String
   status      ShipmentStatus  @default(PENDING)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace?      @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   events      ShipmentEvent[]
   @@index([userId, status])
+  @@index([workspaceId, status])
 }
 
 model ShipmentEvent {
@@ -98,69 +210,51 @@ model Notification {
 }
 
 model Referral {
-  id          String   @id @default(cuid())
-  userId      String
+  id            String   @id @default(cuid())
+  userId        String
   referredEmail String
-  reward      Int      @default(0)
-  status      String   @default("PENDING")
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model Vendor {
-  id        String   @id @default(cuid())
-  name      String
-  category  String
-  status    String   @default("AVAILABLE")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model AuditLog {
-  id        String   @id @default(cuid())
-  userId    String?
-  action    String
-  entity    String
-  entityId  String?
-  metadata  Json?
-  createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reward        Int      @default(0)
+  status        String   @default("PENDING")
+  createdAt     DateTime @default(now())
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, createdAt])
 }
 
+model Vendor {
+  id          String    @id @default(cuid())
+  workspaceId String?
+  name        String
+  category    String
+  status      String    @default("AVAILABLE")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  @@index([workspaceId, status])
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  userId      String?
+  workspaceId String?
+  action      String
+  entity      String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  @@index([userId, createdAt])
+  @@index([workspaceId, createdAt])
+}
+
 model KYCVerification {
-  id         String   @id @default(cuid())
-  userId     String
-  status     String   @default("PENDING")
-  provider   String?
-  reference  String?
+  id          String   @id @default(cuid())
+  userId      String
+  status      String   @default("PENDING")
+  provider    String?
+  reference   String?
   submittedAt DateTime @default(now())
-  reviewedAt DateTime?
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewedAt  DateTime?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, status])
-}
-
-model Account {
-  id                String  @id @default(cuid())
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String? @db.Text
-  access_token      String? @db.Text
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String? @db.Text
-  session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  @@unique([provider, providerAccountId])
-}
-
-model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
