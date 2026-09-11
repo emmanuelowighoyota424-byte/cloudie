@@ -1,0 +1,42 @@
+import { createHash } from 'node:crypto'
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { requireUser } from '@/lib/authorization'
+
+function hashToken(token: string) {
+  return createHash('sha256').update(token).digest('hex')
+}
+
+export async function POST(_request: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
+  try {
+    const user = await requireUser()
+    if (!token || token.length < 20) return NextResponse.json({ error: 'Invalid invitation' }, { status: 400 })
+
+    const invitation = await prisma.workspaceInvitation.findUnique({ where: { tokenHash: hashToken(token) } })
+    if (!invitation) return NextResponse.json({ error: 'Invitation not found' }, { status: 404 })
+    if (invitation.status !== 'PENDING') return NextResponse.json({ error: 'Invitation is no longer active' }, { status: 409 })
+    if (invitation.expiresAt <= new Date()) {
+      await prisma.workspaceInvitation.update({ where: { id: invitation.id }, data: { status: 'EXPIRED' } })
+      return NextResponse.json({ error: 'Invitation expired' }, { status: 410 })
+    }
+    if (invitation.email !== user.email.toLowerCase()) return NextResponse.json({ error: 'Invitation email does not match the signed-in account' }, { status: 403 })
+
+    const result = await prisma.$transaction(async (tx) => {
+      const member = await tx.workspaceMember.upsert({
+        where: { workspaceId_userId: { workspaceId: invitation.workspaceId, userId: user.id } },
+        update: { role: invitation.role, status: 'ACTIVE' },
+        create: { workspaceId: invitation.workspaceId, userId: user.id, role: invitation.role },
+      })
+      await tx.workspaceInvitation.update({ where: { id: invitation.id }, data: { status: 'ACCEPTED', acceptedById: user.id, acceptedAt: new Date() } })
+      await tx.auditLog.create({ data: { actorId: user.id, userId: user.id, workspaceId: invitation.workspaceId, action: 'workspace.invitation.accepted', entity: 'WorkspaceInvitation', entityId: invitation.id, result: 'SUCCESS' } })
+      return member
+    })
+
+    return NextResponse.json({ workspaceId: invitation.workspaceId, membershipId: result.id, role: result.role })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to accept invitation'
+    const status = message.includes('Authentication') ? 401 : 500
+    return NextResponse.json({ error: message }, { status })
+  }
+}
