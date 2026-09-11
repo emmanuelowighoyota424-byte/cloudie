@@ -18,13 +18,15 @@ export async function POST(request: Request) {
   const eventId = transactionId ? `${event}:${transactionId}` : `${event}:${reference}`
   if (!event || !eventId) return NextResponse.json({ error: 'Invalid webhook event' }, { status: 400 })
 
-  const existing = await prisma.webhookEvent.findUnique({ where: { provider_eventId: { provider: 'paystack', eventId } } })
-  if (existing?.processedAt) return NextResponse.json({ received: true, duplicate: true })
-  const webhook = existing || await prisma.webhookEvent.create({ data: { provider: 'paystack', eventId, payload: payload as Prisma.InputJsonValue } }).catch((error) => {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return prisma.webhookEvent.findUnique({ where: { provider_eventId: { provider: 'paystack', eventId } } })
-    throw error
+  const webhook = await prisma.webhookEvent.upsert({
+    where: { provider_eventId: { provider: 'paystack', eventId } },
+    create: { provider: 'paystack', eventId, payload: payload as Prisma.InputJsonValue, processingAt: new Date() },
+    update: {},
   })
-  if (!webhook) return NextResponse.json({ error: 'Webhook event could not be recorded' }, { status: 500 })
+  if (webhook.processedAt) return NextResponse.json({ received: true, duplicate: true })
+
+  const claim = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`UPDATE "WebhookEvent" SET "processingAt"=CURRENT_TIMESTAMP,"payload"=${JSON.stringify(payload)}::jsonb WHERE "id"=${webhook.id} AND "processedAt" IS NULL AND ("processingAt" IS NULL OR "processingAt" < CURRENT_TIMESTAMP - INTERVAL '10 minutes') RETURNING "id"`)
+  if (!claim[0]) return NextResponse.json({ received: true, processing: true }, { status: 202 })
 
   try {
     if (event === 'charge.success') {
@@ -34,10 +36,10 @@ export async function POST(request: Request) {
       const verified = await verifyPaystackTransaction(reference)
       await reconcilePaystackPayment(payment.id, verified)
     }
-    await prisma.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date() } })
+    await prisma.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date(), processingAt: null } })
     return NextResponse.json({ received: true })
   } catch (error) {
-    await prisma.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: null } }).catch(() => undefined)
+    await prisma.webhookEvent.update({ where: { id: webhook.id }, data: { processingAt: null } }).catch(() => undefined)
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Webhook processing failed' }, { status: 400 })
   }
 }
