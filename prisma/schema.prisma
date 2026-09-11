@@ -466,7 +466,7 @@ model Referral {
 }
 
 model AuditLog {
-  id String @id
+  id String @id @default(cuid())
   userId String?
   actorId String?
   workspaceId String?
