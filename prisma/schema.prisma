@@ -416,7 +416,7 @@ model Payment {
 }
 
 model WebhookEvent {
-  id String @id
+  id String @id @default(cuid())
   provider String
   eventId String
   payload Json
@@ -426,7 +426,7 @@ model WebhookEvent {
 }
 
 model Subscription {
-  id String @id
+  id String @id @default(cuid())
   workspaceId String @unique
   plan Plan
   status SubscriptionStatus
@@ -485,7 +485,7 @@ model AuditLog {
 }
 
 model KYCVerification {
-  id String @id
+  id String @id @default(cuid())
   userId String
   status String @default("PENDING")
   provider String?
