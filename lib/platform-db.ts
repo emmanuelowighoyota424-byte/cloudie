@@ -10,12 +10,14 @@ export async function createDispute(input: { id: string; workspaceId: string; or
   return rows[0]
 }
 
-export async function listDisputes(workspaceId: string, userId: string, isAdmin: boolean) {
-  return prisma.$queryRaw<DisputeRow[]>(isAdmin ? Prisma.sql`SELECT * FROM "MarketplaceDispute" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC LIMIT 100` : Prisma.sql`SELECT * FROM "MarketplaceDispute" WHERE "workspaceId"=${workspaceId} AND ("openedById"=${userId} OR "customerId"=${userId}) ORDER BY "createdAt" DESC LIMIT 100`)
+export async function listDisputes(workspaceId: string, userId: string, isAdmin: boolean, isVendor = false) {
+  if (isAdmin) return prisma.$queryRaw<DisputeRow[]>(Prisma.sql`SELECT * FROM "MarketplaceDispute" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC LIMIT 100`)
+  if (isVendor) return prisma.$queryRaw<DisputeRow[]>(Prisma.sql`SELECT d.* FROM "MarketplaceDispute" d JOIN "OrderItem" oi ON oi."id"=d."orderItemId" JOIN "Product" p ON p."id"=oi."productId" JOIN "WorkspaceMember" wm ON wm."workspaceId"=d."workspaceId" AND wm."userId"=${userId} AND wm."role"='VENDOR' WHERE d."workspaceId"=${workspaceId} AND d."vendorId"=p."vendorId" ORDER BY d."createdAt" DESC LIMIT 100`)
+  return prisma.$queryRaw<DisputeRow[]>(Prisma.sql`SELECT * FROM "MarketplaceDispute" WHERE "workspaceId"=${workspaceId} AND ("openedById"=${userId} OR "customerId"=${userId}) ORDER BY "createdAt" DESC LIMIT 100`)
 }
 
-export async function updateDispute(id: string, workspaceId: string, actorId: string, status: string, resolution: string | null) {
-  const rows = await prisma.$queryRaw<DisputeRow[]>(Prisma.sql`UPDATE "MarketplaceDispute" SET "status"=${status},"resolution"=${resolution},"resolvedById"=CASE WHEN ${status} IN ('RESOLVED','REJECTED','CANCELLED') THEN ${actorId} ELSE "resolvedById" END,"resolvedAt"=CASE WHEN ${status} IN ('RESOLVED','REJECTED','CANCELLED') THEN CURRENT_TIMESTAMP ELSE "resolvedAt" END,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${id} AND "workspaceId"=${workspaceId} RETURNING *`)
+export async function updateDispute(id: string, workspaceId: string, actorId: string, status: string, resolution: string | null, expectedStatus: string) {
+  const rows = await prisma.$queryRaw<DisputeRow[]>(Prisma.sql`UPDATE "MarketplaceDispute" SET "status"=${status},"resolution"=${resolution},"resolvedById"=CASE WHEN ${status} IN ('RESOLVED','REJECTED','CANCELLED') THEN ${actorId} ELSE "resolvedById" END,"resolvedAt"=CASE WHEN ${status} IN ('RESOLVED','REJECTED','CANCELLED') THEN CURRENT_TIMESTAMP ELSE "resolvedAt" END,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${id} AND "workspaceId"=${workspaceId} AND "status"=${expectedStatus} RETURNING *`)
   return rows[0]
 }
 
