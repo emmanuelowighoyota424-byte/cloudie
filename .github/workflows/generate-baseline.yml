@@ -12,6 +12,8 @@ jobs:
   baseline:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/cloudie_ci
     steps:
       - uses: actions/checkout@v4
       - name: Check baseline
