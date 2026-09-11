@@ -10,25 +10,34 @@ permissions:
 
 jobs:
   baseline:
-    if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      - name: Skip when baseline already exists
+        run: test -f prisma/migrations/0_init/migration.sql && echo 'Baseline already exists' && exit 0 || true
       - uses: pnpm/action-setup@v4
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
         with:
           version: 10
           run_install: false
       - uses: actions/setup-node@v4
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
       - run: pnpm exec prisma validate
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
       - run: mkdir -p prisma/migrations/0_init
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
       - run: pnpm exec prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script > prisma/migrations/0_init/migration.sql
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
       - run: test -s prisma/migrations/0_init/migration.sql
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
       - name: Commit baseline migration
+        if: ${{ !hashFiles('prisma/migrations/0_init/migration.sql') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
