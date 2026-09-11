@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   const webhook = await prisma.webhookEvent.upsert({
     where: { provider_eventId: { provider: 'paystack', eventId } },
-    create: { provider: 'paystack', eventId, payload: payload as Prisma.InputJsonValue, processingAt: new Date() },
+    create: { provider: 'paystack', eventId, payload: payload as Prisma.InputJsonValue },
     update: {},
   })
   if (webhook.processedAt) return NextResponse.json({ received: true, duplicate: true })
