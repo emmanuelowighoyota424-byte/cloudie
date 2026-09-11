@@ -3,6 +3,7 @@ type EmailInput = {
   subject: string
   html: string
   text: string
+  idempotencyKey?: string
 }
 
 function requireEmailConfig() {
@@ -17,9 +18,11 @@ function requireEmailConfig() {
 
 export async function sendEmail(input: EmailInput) {
   const { apiKey, from } = requireEmailConfig()
+  const headers: Record<string, string> = { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
+  if (input.idempotencyKey) headers['Idempotency-Key'] = input.idempotencyKey
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ from, to: [input.to], subject: input.subject, html: input.html, text: input.text }),
   })
   if (!response.ok) {
