@@ -6,9 +6,20 @@ import { validateUpload, sanitizeFilename, putPrivateObject } from '@/lib/storag
 export async function GET(_: Request, context: { params: Promise<{ workspaceId: string }> }) {
   try {
     const { workspaceId } = await context.params
-    await requirePermission(workspaceId, 'documents.read')
+    const { user, membership } = await requirePermission(workspaceId, 'documents.read')
+    let resourceFilter: Record<string, unknown> = {}
+    if (membership.role === 'CUSTOMER') {
+      const customer = await prisma.customer.findFirst({ where: { workspaceId, email: { equals: user.email, mode: 'insensitive' } }, select: { id: true } })
+      resourceFilter = { customerId: customer?.id ?? '__no_customer__' }
+    } else if (membership.role === 'DRIVER') {
+      const driver = await prisma.driver.findFirst({ where: { workspaceId, userId: user.id, status: 'ACTIVE' }, select: { id: true } })
+      resourceFilter = { shipment: { driverId: driver?.id ?? '__no_driver__' } }
+    } else if (membership.role === 'WAREHOUSE_STAFF') {
+      const assignments = await prisma.warehouseStaffAssignment.findMany({ where: { workspaceId, userId: user.id }, select: { warehouseId: true } })
+      resourceFilter = { shipment: { warehouseId: { in: assignments.map((assignment) => assignment.warehouseId) } } }
+    }
     const documents = await prisma.document.findMany({
-      where: { workspaceId },
+      where: { workspaceId, ...resourceFilter },
       select: { id: true, name: true, mimeType: true, sizeBytes: true, createdAt: true, updatedAt: true, ownerId: true, shipmentId: true, customerId: true },
       orderBy: { createdAt: 'desc' }, take: 100,
     })
