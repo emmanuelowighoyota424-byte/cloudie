@@ -20,7 +20,7 @@ async function main() {
   if (!migrationHistoryPresent) {
     console.log('No Prisma migration history found. Verifying the existing production schema matches Prisma before baselining.')
     try {
-      execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'diff', '--from-url', process.env.DATABASE_URL, '--to-schema', 'prisma/schema.prisma', '--exit-code'], { stdio: 'inherit', env: process.env })
+      execFileSync('pnpm', ['exec', 'prisma', 'migrate', 'diff', '--from-url', process.env.DATABASE_URL, '--to-schema-datamodel', 'prisma/schema.prisma', '--exit-code'], { stdio: 'inherit', env: process.env })
     } catch (error) {
       const code = typeof error?.status === 'number' ? error.status : 1
       if (code === 2) throw new Error('Production database schema differs from prisma/schema.prisma; refusing to baseline automatically.')
