@@ -15,13 +15,12 @@ export async function GET(request: Request) {
       prisma.workspace.count({ where: { createdAt: { gte: since } } }),
       prisma.shipment.count({ where: { createdAt: { gte: since } } }),
       prisma.payment.groupBy({ by: ['status'], where: { createdAt: { gte: since } }, _count: true }),
-      prisma.pointLedger.groupBy({ by: [], where: { createdAt: { gte: since } }, _sum: { amount: true } }),
+      prisma.pointLedger.aggregate({ where: { createdAt: { gte: since } }, _sum: { amount: true } }),
       prisma.kYCVerification.groupBy({ by: ['status'], where: { submittedAt: { gte: since } }, _count: true }),
       prisma.$queryRaw(Prisma.sql`SELECT "status", COUNT(*)::int AS count FROM "EmailMessage" WHERE "createdAt">=${since} GROUP BY "status"`),
       prisma.$queryRaw(Prisma.sql`SELECT "status", COUNT(*)::int AS count FROM "CloudieJob" WHERE "createdAt">=${since} GROUP BY "status"`),
     ])
-    const pointTotal = points[0]?._sum.amount ?? 0
-    return NextResponse.json({ period: { days, since }, revenue: orders._sum.total?.toString() ?? '0', orders: orders._count, customers: users, tenants, shipments, payments, pointsActivity: pointTotal, kyc, emails, jobs })
+    return NextResponse.json({ period: { days, since }, revenue: orders._sum.total?.toString() ?? '0', orders: orders._count, customers: users, tenants, shipments, payments, pointsActivity: points._sum.amount ?? 0, kyc, emails, jobs })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load analytics'
     return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 403 })
