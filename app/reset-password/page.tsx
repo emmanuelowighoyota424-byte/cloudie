@@ -1,19 +1,20 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams, useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { authClient } from '@/lib/auth-client'
 
 export default function ResetPasswordPage() {
-  const params = useSearchParams()
   const router = useRouter()
-  const token = params.get('token') ?? ''
+  const [token, setToken] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => setToken(new URLSearchParams(window.location.search).get('token') ?? ''), [])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
