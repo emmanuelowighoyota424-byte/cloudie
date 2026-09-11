@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { requireSuperAdmin, requireUser } from '@/lib/authorization'
+import { getPrivateObject } from '@/lib/storage'
 import { prisma } from '@/lib/prisma'
 
 const statuses = ['NOT_STARTED','PENDING','UNDER_REVIEW','VERIFIED','REJECTED']
+const allowedTransitions: Record<string, string[]> = {
+  NOT_STARTED: ['PENDING'],
+  PENDING: ['UNDER_REVIEW', 'REJECTED'],
+  UNDER_REVIEW: ['VERIFIED', 'REJECTED'],
+  REJECTED: ['PENDING'],
+  VERIFIED: [],
+}
 
 export async function GET() {
   try {
@@ -22,6 +30,7 @@ export async function POST(request: Request) {
     const user = await requireUser()
     const body = await request.json().catch(() => null) as Record<string, unknown> | null
     const action = typeof body?.action === 'string' ? body.action : 'submit'
+
     if (action === 'review') {
       await requireSuperAdmin()
       const userId = typeof body?.userId === 'string' ? body.userId : ''
@@ -30,11 +39,14 @@ export async function POST(request: Request) {
       if (!userId || !statuses.includes(status) || (status === 'REJECTED' && !reason)) return NextResponse.json({ error: 'Valid userId/status required; rejection requires reason' }, { status: 400 })
       const current = await prisma.kYCVerification.findFirst({ where: { userId }, orderBy: { submittedAt: 'desc' } })
       if (!current) return NextResponse.json({ error: 'KYC record not found' }, { status: 404 })
-      const updated = await prisma.kYCVerification.update({ where: { id: current.id }, data: { status, reviewedAt: new Date() } })
+      if (!allowedTransitions[current.status]?.includes(status)) return NextResponse.json({ error: `Invalid KYC transition ${current.status} -> ${status}` }, { status: 409 })
+      const changed = await prisma.kYCVerification.updateMany({ where: { id: current.id, status: current.status }, data: { status, reviewedAt: new Date() } })
+      if (changed.count !== 1) return NextResponse.json({ error: 'KYC changed concurrently; reload and retry' }, { status: 409 })
       await prisma.$executeRaw(Prisma.sql`INSERT INTO "KYCEvent" ("id","kycId","actorId","action","fromStatus","toStatus","reason") VALUES (${crypto.randomUUID()},${current.id},${user.id},'REVIEW',${current.status},${status},${reason})`)
       await prisma.auditLog.create({ data: { actorId: user.id, userId, action: 'kyc.reviewed', entity: 'KYCVerification', entityId: current.id, metadata: { from: current.status, to: status, reason } } })
-      return NextResponse.json({ kyc: updated })
+      return NextResponse.json({ kyc: { ...current, status } })
     }
+
     if (action === 'submit') {
       const documentType = typeof body?.documentType === 'string' ? body.documentType.trim() : ''
       const storageKey = typeof body?.storageKey === 'string' ? body.storageKey.trim() : ''
@@ -42,6 +54,7 @@ export async function POST(request: Request) {
       const mimeType = typeof body?.mimeType === 'string' ? body.mimeType.trim() : ''
       if (!documentType || !storageKey || !originalFilename || !mimeType) return NextResponse.json({ error: 'documentType, storageKey, originalFilename and mimeType are required' }, { status: 400 })
       if (!storageKey.startsWith(`kyc/${user.id}/`)) return NextResponse.json({ error: 'Invalid KYC storage ownership' }, { status: 403 })
+      await getPrivateObject(storageKey)
       let kyc = await prisma.kYCVerification.findFirst({ where: { userId: user.id }, orderBy: { submittedAt: 'desc' } })
       if (!kyc || ['REJECTED','NOT_STARTED'].includes(kyc.status)) kyc = await prisma.kYCVerification.create({ data: { userId: user.id, status: 'PENDING' } })
       else if (kyc.status === 'VERIFIED') return NextResponse.json({ error: 'KYC is already verified' }, { status: 409 })
