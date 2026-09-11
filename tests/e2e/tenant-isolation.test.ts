@@ -112,3 +112,25 @@ test('customer, driver and warehouse identities remain scoped to their own works
   await expectDenied(driverA, `/api/workspaces/${workspaceB.id}/driver/shipments`)
   await expectDenied(warehouseA, `/api/workspaces/${workspaceB.id}/warehouse/shipments`)
 })
+
+test('customer, driver and warehouse can operate on authorized workspace B resources', async () => {
+  const customer = await testAuth.getAuthHeaders({ userId: users[3].id })
+  const customerResult = await requestAs(customer, `/api/workspaces/${workspaceB.id}/customer/shipments`)
+  assert.equal(customerResult.response.status, 200)
+  assert.match(customerResult.body, new RegExp(shipmentB.id))
+
+  const warehouse = await testAuth.getAuthHeaders({ userId: users[7].id })
+  const warehouseList = await requestAs(warehouse, `/api/workspaces/${workspaceB.id}/warehouse/shipments`)
+  assert.equal(warehouseList.response.status, 200)
+  assert.match(warehouseList.body, new RegExp(shipmentB.id))
+  const received = await requestAs(warehouse, `/api/workspaces/${workspaceB.id}/warehouse/shipments`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ shipmentId: shipmentB.id, action: 'RECEIVE' }) })
+  assert.equal(received.response.status, 200)
+
+  const driver = await testAuth.getAuthHeaders({ userId: users[5].id })
+  for (const status of ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY']) {
+    const result = await requestAs(driver, `/api/workspaces/${workspaceB.id}/driver/shipments`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ shipmentId: shipmentB.id, status }) })
+    assert.equal(result.response.status, 200)
+  }
+  const final = await prisma.shipment.findUnique({ where: { id: shipmentB.id }, select: { status: true } })
+  assert.equal(final?.status, 'OUT_FOR_DELIVERY')
+})
