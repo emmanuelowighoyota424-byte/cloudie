@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { requireWorkspaceRole } from '@/lib/authorization'
+import { requireEntitlement } from '@/lib/entitlements'
 import { generateTrackingNumber } from '@/lib/shipment'
 
 const canManage = ['SUPER_ADMIN', 'WORKSPACE_ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'WAREHOUSE_STAFF'] as const
@@ -35,15 +36,14 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
   try {
     const { workspaceId } = await context.params
     const { user } = await requireWorkspaceRole(workspaceId, canManage as never)
+    await requireEntitlement(workspaceId, 'shipments')
     const body = await request.json().catch(() => null)
     const origin = typeof body?.origin === 'string' ? body.origin.trim() : ''
     const destination = typeof body?.destination === 'string' ? body.destination.trim() : ''
     const customerId = typeof body?.customerId === 'string' ? body.customerId : undefined
     const driverId = typeof body?.driverId === 'string' ? body.driverId : undefined
     const warehouseId = typeof body?.warehouseId === 'string' ? body.warehouseId : undefined
-    if (!origin || !destination || origin.length > 500 || destination.length > 500) {
-      return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 })
-    }
+    if (!origin || !destination || origin.length > 500 || destination.length > 500) return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 })
 
     const [customer, driver, warehouse] = await Promise.all([
       customerId ? prisma.customer.findFirst({ where: { id: customerId, workspaceId }, select: { id: true } }) : null,
@@ -56,19 +56,15 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
 
     const trackingId = await uniqueTrackingNumber()
     const shipment = await prisma.$transaction(async (tx) => {
-      const created = await tx.shipment.create({
-        data: { workspaceId, creatorId: user.id, trackingId, origin, destination, customerId, driverId, warehouseId },
-      })
+      const created = await tx.shipment.create({ data: { workspaceId, creatorId: user.id, trackingId, origin, destination, customerId, driverId, warehouseId } })
       await tx.shipmentEvent.create({ data: { shipmentId: created.id, status: created.status, note: 'Shipment created' } })
-      await tx.auditLog.create({
-        data: { actorId: user.id, userId: user.id, workspaceId, action: 'shipment.created', entity: 'Shipment', entityId: created.id, result: 'SUCCESS' },
-      })
+      await tx.auditLog.create({ data: { actorId: user.id, userId: user.id, workspaceId, action: 'shipment.created', entity: 'Shipment', entityId: created.id, result: 'SUCCESS' } })
       return created
     })
     return NextResponse.json({ shipment }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to create shipment'
-    const status = message.includes('Authentication') ? 401 : message.includes('access') || message.includes('permissions') ? 403 : 500
+    const status = message.includes('Authentication') ? 401 : message.includes('access') || message.includes('permissions') ? 403 : message.includes('limit reached') ? 409 : 500
     return NextResponse.json({ error: message }, { status })
   }
 }
