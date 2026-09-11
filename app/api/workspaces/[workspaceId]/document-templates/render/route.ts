@@ -22,7 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const template = templates[0]
     if (!template) return NextResponse.json({ error: 'Template or version not found' }, { status: 404 })
     const id = crypto.randomUUID()
-    const created = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","templateId","templateVersionId","ownerId","status","idempotencyKey") VALUES (${id},${workspaceId},${template.id},${template.versionId},${user.id},'PROCESSING',${idempotencyKey}) ON CONFLICT ("workspaceId","idempotencyKey") DO NOTHING RETURNING "id"`)
+    const created = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","templateId","templateVersionId","ownerId","status","idempotencyKey") VALUES (${id},${workspaceId},${template.id},${template.versionId},${user.id},'PROCESSING',${idempotencyKey}) ON CONFLICT DO NOTHING RETURNING "id"`)
     if (!created[0]) {
       const replay = await prisma.$queryRaw<Array<{ id: string; status: string; storageKey: string | null; metadata: any }>>(Prisma.sql`SELECT "id","status","storageKey","metadata" FROM "RenderedDocument" WHERE "workspaceId"=${workspaceId} AND "idempotencyKey"=${idempotencyKey} LIMIT 1`)
       return NextResponse.json({ renderedDocument: replay[0], replay: true })
