@@ -80,6 +80,7 @@ jobs:
           cat /tmp/cloudie-e2e.log
           exit 1
       - run: pnpm exec tsx --test tests/e2e/tenant-isolation.test.ts
+      - run: pnpm exec tsx --test tests/e2e/platform-concurrency.test.ts
       - name: Dump application log on failure
         if: failure()
         run: cat /tmp/cloudie-e2e.log || true
