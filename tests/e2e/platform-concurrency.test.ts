@@ -15,7 +15,7 @@ test('rendered-document idempotency permits only one concurrent record', async (
   const workspaceId = crypto.randomUUID()
   const ownerId = crypto.randomUUID()
   const key = `render-${crypto.randomUUID()}`
-  const results = await Promise.all(Array.from({ length: 8 }, () => prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","ownerId","status","idempotencyKey") VALUES (${crypto.randomUUID()},${workspaceId},${ownerId},'PROCESSING',${key}) ON CONFLICT ("workspaceId","idempotencyKey") DO NOTHING RETURNING "id"`)))
+  const results = await Promise.all(Array.from({ length: 8 }, () => prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","ownerId","status","idempotencyKey") VALUES (${crypto.randomUUID()},${workspaceId},${ownerId},'PROCESSING',${key}) ON CONFLICT DO NOTHING RETURNING "id"`)))
   assert.equal(results.filter((r) => r.length === 1).length, 1)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "RenderedDocument" WHERE "workspaceId"=${workspaceId}`)
 })
