@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const provider = getCryptoProvider()
     const address = await provider.createDepositAddress({ customerId: user.id, asset, network })
     const id = crypto.randomUUID()
-    await prisma.$executeRaw(Prisma.sql`INSERT INTO "CryptoDeposit" ("id","workspaceId","userId","provider","asset","network","address","providerReference","metadata") VALUES (${id},${workspaceId},${process.env.CRYPTO_PROVIDER_NAME ?? 'configured'},${asset},${network},${address.address},${address.reference ?? null},${JSON.stringify({ createdBy: 'cloudie' })}::jsonb)`)
+    await prisma.$executeRaw(Prisma.sql`INSERT INTO "CryptoDeposit" ("id","workspaceId","userId","provider","asset","network","address","providerReference","metadata") VALUES (${id},${workspaceId},${user.id},${process.env.CRYPTO_PROVIDER_NAME ?? 'configured'},${asset},${network},${address.address},${address.reference ?? null},${JSON.stringify({ createdBy: 'cloudie' })}::jsonb)`)
     return NextResponse.json({ id, address: address.address, reference: address.reference, status: 'PENDING' }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Crypto provider unavailable'
