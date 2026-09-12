@@ -11,6 +11,14 @@ function configState(value: string | undefined) {
   return value ? 'configured' : 'not_configured'
 }
 
+function smtpConfigured() {
+  return Boolean(process.env.SMTP_HOST?.trim() && process.env.EMAIL_FROM?.trim() && process.env.SMTP_USERNAME?.trim() && process.env.SMTP_PASSWORD)
+}
+
+function jobsConfigured() {
+  return Boolean(process.env.JOBS_RUNNER_SECRET?.trim() || process.env.CRON_SECRET?.trim())
+}
+
 export async function GET() {
   try {
     await prisma.$queryRaw`SELECT 1`
@@ -23,14 +31,13 @@ export async function GET() {
       database: 'healthy',
       prisma: 'healthy',
       migrations: migrationsTablePresent ? 'healthy' : 'unavailable',
-      storage: configState(process.env.BLOB_READ_WRITE_TOKEN || process.env.S3_ENDPOINT),
-      email: process.env.EMAIL_PROVIDER && process.env.EMAIL_API_KEY && process.env.EMAIL_FROM ? 'configured' : 'not_configured',
-      redis: configState(process.env.REDIS_URL),
-      jobs: process.env.JOBS_RUNNER_SECRET ? 'configured' : 'unavailable',
+      storage: configState(process.env.BLOB_READ_WRITE_TOKEN || (process.env.BLOB_STORE_ID && process.env.VERCEL_OIDC_TOKEN ? 'oidc' : undefined)),
+      email: smtpConfigured() ? 'configured' : 'not_configured',
+      jobs: jobsConfigured() ? 'configured' : 'unavailable',
       paystack: process.env.PAYSTACK_SECRET_KEY ? 'configured' : 'not_configured',
-      crypto: process.env.CRYPTO_PROVIDER_KEY ? 'configured' : 'not_configured',
+      crypto: process.env.CRYPTO_RPC_URL ? 'configured' : 'not_configured',
     }
-    const degraded = Object.values(checks).some((value) => ['unavailable'].includes(value)) || missingTables.length > 0
+    const degraded = Object.values(checks).some((value) => value === 'unavailable') || missingTables.length > 0
     return NextResponse.json({ status: missingTables.length ? 'unavailable' : degraded ? 'degraded' : 'healthy', checks, schema: missingTables.length ? 'incomplete' : 'ok', missingTables, migrationsTablePresent, timestamp: new Date().toISOString() }, { status: missingTables.length ? 503 : 200 })
   } catch {
     return NextResponse.json({ status: 'unavailable', checks: { database: 'unavailable' }, timestamp: new Date().toISOString() }, { status: 503 })
