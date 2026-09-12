@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../../lib/prisma'
 import { roleHasPermission } from '../../lib/permissions'
 import { sanitizeFilename, validateUpload } from '../../lib/storage'
+import { isPdf, renderPdf } from '../../lib/pdf'
 
 async function createUser(role: 'USER' | 'SUPER_ADMIN' = 'USER') {
   const id = crypto.randomUUID()
@@ -89,17 +90,25 @@ test('document artifact acceptance validates a real PDF byte signature and tenan
   await prisma.workspace.create({ data: { id: workspaceB, name: 'Docs B', slug: `docs-${workspaceB}`, ownerId: ownerB } })
   const templateId = crypto.randomUUID()
   const versionId = crypto.randomUUID()
-  await prisma.$executeRaw(Prisma.sql`INSERT INTO "DocumentTemplate" ("id","workspaceId","name","description","createdBy") VALUES (${templateId},${workspaceA},'Acceptance Invoice','Acceptance PDF',${ownerA})`)
-  await prisma.$executeRaw(Prisma.sql`INSERT INTO "DocumentTemplateVersion" ("id","templateId","version","content","createdBy") VALUES (${versionId},${templateId},1,'Acceptance PDF content',${ownerA})`)
+  await prisma.$executeRaw(Prisma.sql`INSERT INTO "DocumentTemplate" ("id","workspaceId","name","documentType","createdById") VALUES (${templateId},${workspaceA},'Acceptance Invoice','invoice',${ownerA})`)
+  const content = { title: 'Acceptance Invoice', fields: { tenant: workspaceA, owner: ownerA, amount: '100.00' } }
+  await prisma.$executeRaw(Prisma.sql`INSERT INTO "DocumentTemplateVersion" ("id","templateId","version","content","createdById") VALUES (${versionId},${templateId},1,${JSON.stringify(content)}::jsonb,${ownerA})`)
+  const pdfBytes = renderPdf(content)
+  assert.equal(isPdf(pdfBytes), true)
+  assert.ok(pdfBytes.byteLength > 100)
+  assert.equal(Buffer.from(pdfBytes).subarray(0, 5).toString(), '%PDF-')
   const renderedId = crypto.randomUUID()
-  const storageKey = `documents/${workspaceA}/${renderedId}.pdf`
-  const pdfBytes = Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF')
-  assert.equal(pdfBytes.subarray(0, 5).toString(), '%PDF-')
-  await prisma.$executeRaw(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","templateId","versionId","status","storageKey","mimeType","sizeBytes","createdBy") VALUES (${renderedId},${workspaceA},${templateId},${versionId},'READY',${storageKey},'application/pdf',${pdfBytes.byteLength},${ownerA})`)
-  const own = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "RenderedDocument" WHERE "id"=${renderedId} AND "workspaceId"=${workspaceA}`)
+  const storageKey = `workspaces/${workspaceA}/documents/rendered/${renderedId}.pdf`
+  await prisma.$executeRaw(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","templateId","templateVersionId","ownerId","status","storageKey","metadata") VALUES (${renderedId},${workspaceA},${templateId},${versionId},${ownerA},'COMPLETED',${storageKey},${JSON.stringify({ format: 'pdf', bytes: pdfBytes.byteLength, version: 1 })}::jsonb)`)
+  const own = await prisma.$queryRaw<Array<{ id: string; storageKey: string; metadata: unknown }>>(Prisma.sql`SELECT "id","storageKey","metadata" FROM "RenderedDocument" WHERE "id"=${renderedId} AND "workspaceId"=${workspaceA} AND "ownerId"=${ownerA}`)
   const foreign = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "RenderedDocument" WHERE "id"=${renderedId} AND "workspaceId"=${workspaceB}`)
   assert.equal(own.length, 1)
+  assert.equal(own[0]?.storageKey, storageKey)
   assert.equal(foreign.length, 0)
+  const metadata = own[0]?.metadata as { format?: string; bytes?: number; version?: number }
+  assert.equal(metadata.format, 'pdf')
+  assert.equal(metadata.bytes, pdfBytes.byteLength)
+  assert.equal(metadata.version, 1)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "RenderedDocument" WHERE "id"=${renderedId}`)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplateVersion" WHERE "id"=${versionId}`)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplate" WHERE "id"=${templateId}`)
