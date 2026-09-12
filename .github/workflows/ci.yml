@@ -11,6 +11,20 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: cloudie_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d cloudie_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     env:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/cloudie_ci
       BETTER_AUTH_SECRET: ci-only-secret-for-build-validation-32-chars
@@ -29,8 +43,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec prisma validate
       - run: pnpm exec prisma generate
-      - run: pnpm run typecheck
+      - run: pnpm exec prisma migrate deploy
       - run: pnpm test
+      - run: pnpm run typecheck
       - run: pnpm run build
 
   e2e-security:
