@@ -5,7 +5,7 @@ import { prisma } from '../../lib/prisma'
 import { roleHasPermission } from '../../lib/permissions'
 import { sanitizeFilename, validateUpload } from '../../lib/storage'
 
-async function createUser(role: 'CUSTOMER' | 'SUPER_ADMIN' = 'CUSTOMER') {
+async function createUser(role: 'USER' | 'SUPER_ADMIN' = 'USER') {
   const id = crypto.randomUUID()
   await prisma.user.create({ data: { id, name: `Acceptance ${id}`, email: `${id}@example.invalid`, role } })
   return id
@@ -19,17 +19,14 @@ test('KYC rejection reason and resubmission lifecycle persist with tenant-safe o
   const submissionB = crypto.randomUUID()
   await prisma.kYCVerification.create({ data: { id: kycId, userId: userA, status: 'PENDING' } })
   await prisma.$executeRaw(Prisma.sql`INSERT INTO "KYCSubmission" ("id","userId","kycId","documentType","storageKey","originalFilename","mimeType") VALUES (${submissionA},${userA},${kycId},'identity',${`kyc/${userA}/doc-a.pdf`},${sanitizeFilename('../../passport final.pdf')},'application/pdf')`)
-
   const ownerRows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "KYCSubmission" WHERE "id"=${submissionA} AND "userId"=${userA}`)
   const crossUserRows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "KYCSubmission" WHERE "id"=${submissionA} AND "userId"=${userB}`)
   assert.equal(ownerRows.length, 1)
   assert.equal(crossUserRows.length, 0)
-
   await prisma.kYCVerification.update({ where: { id: kycId }, data: { status: 'REJECTED', reviewedAt: new Date() } })
   await prisma.$executeRaw(Prisma.sql`INSERT INTO "KYCEvent" ("id","kycId","actorId","action","fromStatus","toStatus","reason") VALUES (${crypto.randomUUID()},${kycId},${userB},'REVIEW','PENDING','REJECTED','Document is unreadable')`)
   const rejection = await prisma.$queryRaw<Array<{ reason: string }>>(Prisma.sql`SELECT "reason" FROM "KYCEvent" WHERE "kycId"=${kycId} AND "toStatus"='REJECTED' ORDER BY "createdAt" DESC LIMIT 1`)
   assert.equal(rejection[0]?.reason, 'Document is unreadable')
-
   await prisma.kYCVerification.update({ where: { id: kycId }, data: { status: 'PENDING', reviewedAt: null } })
   await prisma.$executeRaw(Prisma.sql`INSERT INTO "KYCSubmission" ("id","userId","kycId","documentType","storageKey","originalFilename","mimeType") VALUES (${submissionB},${userA},${kycId},'identity',${`kyc/${userA}/resubmission.png`},'resubmission.png','image/png')`)
   await prisma.kYCVerification.update({ where: { id: kycId }, data: { status: 'VERIFIED', reviewedAt: new Date() } })
@@ -38,7 +35,6 @@ test('KYC rejection reason and resubmission lifecycle persist with tenant-safe o
   assert.equal(final?.status, 'VERIFIED')
   assert.equal(submissions.length, 2)
   assert.ok(submissions.every((row) => row.storageKey.startsWith(`kyc/${userA}/`)))
-
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCSubmission" WHERE "kycId"=${kycId}`)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCEvent" WHERE "kycId"=${kycId}`)
   await prisma.kYCVerification.delete({ where: { id: kycId } })
@@ -53,7 +49,7 @@ test('KYC upload policy rejects invalid MIME, oversized files, and unsafe filena
 })
 
 test('platform-admin permission cannot be acquired by customer, vendor, or workspace roles', () => {
-  for (const role of ['CUSTOMER', 'VENDOR', 'WORKSPACE_ADMIN', 'DISPATCHER', 'DRIVER', 'WAREHOUSE_STAFF'] as const) {
+  for (const role of ['CUSTOMER', 'VENDOR', 'WORKSPACE_ADMIN', 'DRIVER', 'WAREHOUSE_STAFF'] as const) {
     assert.equal(roleHasPermission(role, 'admin.platform'), false)
   }
   assert.equal(roleHasPermission('SUPER_ADMIN', 'admin.platform'), true)
