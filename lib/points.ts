@@ -45,9 +45,23 @@ async function mutate(operation: PointOperation, input: PointMutationInput) {
     try {
       return await prisma.$transaction(
         async (tx) => {
-          await lock(tx, `point-reference:${input.reference}`)
-          await lock(tx, `point-user:${input.userId}`)
+          // Acquire row-level exclusive lock on User to serialize all point operations.
+          // This must happen FIRST, before any reads, to prevent read-after-write conflicts.
+          // FOR UPDATE blocks concurrent transactions until this one commits.
+          const user = await tx.$queryRaw<Array<{ id: string }>>`
+            SELECT id FROM "User" WHERE id = ${input.userId} FOR UPDATE
+          `
 
+          if (!user || user.length === 0) {
+            throw new PointsError('User not found', 'USER_NOT_FOUND')
+          }
+
+          // Lock the reference to ensure idempotency under concurrency.
+          // This prevents duplicate ledger entries for the same reference.
+          await lock(tx, `point-reference:${input.reference}`)
+
+          // Check if this reference was already processed.
+          // Safe because User lock serializes all operations for this user.
           const existing = await tx.pointLedger.findFirst({
             where: { reference: input.reference },
             select: { id: true, amount: true, balance: true, description: true, userId: true },
@@ -59,6 +73,8 @@ async function mutate(operation: PointOperation, input: PointMutationInput) {
             return { ...existing, idempotent: true }
           }
 
+          // Calculate new balance from all existing ledger entries.
+          // Safe because User lock prevents concurrent updates.
           const aggregate = await tx.pointLedger.aggregate({ where: { userId: input.userId }, _sum: { amount: true } })
           const currentBalance = aggregate._sum.amount ?? 0
           const nextBalance = operation === 'CREDIT' ? currentBalance + input.amount : currentBalance - input.amount
@@ -67,6 +83,8 @@ async function mutate(operation: PointOperation, input: PointMutationInput) {
             throw new PointsError('Insufficient points', 'INSUFFICIENT_POINTS')
           }
 
+          // Create ledger entry with calculated balance.
+          // Foreign key constraint ensures User still exists (would fail if User was deleted).
           const entry = await tx.pointLedger.create({
             data: {
               userId: input.userId,
@@ -83,11 +101,16 @@ async function mutate(operation: PointOperation, input: PointMutationInput) {
       )
     } catch (error) {
       if (error instanceof PointsError) throw error
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 3) continue
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034' && attempt < 3) {
+        // P2034: Transaction conflict or deadlock; retry with backoff
+        const delayMs = 50 * Math.pow(2, attempt)
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+        continue
+      }
       throw error
     }
   }
-  throw new PointsError('Unable to safely update points', 'TRANSACTION_RETRY_EXHAUSTED')
+  throw new PointsError('Unable to safely update points after 4 attempts', 'TRANSACTION_RETRY_EXHAUSTED')
 }
 
 export function creditPoints(input: PointMutationInput) {
