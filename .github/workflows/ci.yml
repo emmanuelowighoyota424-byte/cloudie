@@ -97,6 +97,7 @@ jobs:
       - run: pnpm exec tsx --test tests/e2e/tenant-isolation.test.ts
       - run: pnpm exec tsx --test tests/e2e/platform-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/webhook-job-concurrency.test.ts
+      - run: pnpm exec tsx --test tests/e2e/acceptance-gates.test.ts
       - name: Dump application log on failure
         if: failure()
         run: cat /tmp/cloudie-e2e.log || true
