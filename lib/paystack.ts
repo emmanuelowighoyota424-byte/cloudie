@@ -63,9 +63,24 @@ export async function reconcilePaystackPayment(paymentId: string, verified: Pays
     if (verified.currency.toUpperCase() !== payment.currency.toUpperCase()) throw new Error('Paystack currency mismatch')
     const normalized = verified.status.toLowerCase()
     const status = normalized === 'success' ? 'PAID' : normalized === 'abandoned' ? 'ABANDONED' : 'FAILED'
-    const updated = await tx.payment.update({ where: { id: payment.id }, data: { status, verifiedAt: new Date() } })
-    if (status === 'PAID') await tx.order.updateMany({ where: { id: payment.orderId, paymentStatus: { not: 'PAID' } }, data: { paymentStatus: 'PAID', status: 'PROCESSING' } })
+
+    // The conditional update is the idempotency gate. Under concurrent webhook/callback
+    // replay, exactly one transaction owns the state transition and emits the audit event.
+    const transitioned = await tx.payment.updateMany({
+      where: { id: payment.id, status: { not: status } },
+      data: { status, verifiedAt: new Date() },
+    })
+
+    if (transitioned.count === 0) {
+      const current = await tx.payment.findUnique({ where: { id: payment.id } })
+      return { payment: current, orderId: payment.orderId, workspaceId: payment.order.workspaceId, userId: payment.order.userId, duplicate: true }
+    }
+
+    if (status === 'PAID') {
+      await tx.order.updateMany({ where: { id: payment.orderId, paymentStatus: { not: 'PAID' } }, data: { paymentStatus: 'PAID', status: 'PROCESSING' } })
+    }
     await tx.auditLog.create({ data: { userId: payment.order.userId ?? undefined, workspaceId: payment.order.workspaceId, action: `payment.paystack.${status.toLowerCase()}`, entity: 'Payment', entityId: payment.id, metadata: { provider: 'paystack', reference: payment.providerReference, transactionId: verified.id, gatewayResponse: verified.gateway_response || null } } })
-    return { payment: updated, orderId: payment.orderId, workspaceId: payment.order.workspaceId, userId: payment.order.userId }
+    const updated = await tx.payment.findUnique({ where: { id: payment.id } })
+    return { payment: updated, orderId: payment.orderId, workspaceId: payment.order.workspaceId, userId: payment.order.userId, duplicate: false }
   })
 }
