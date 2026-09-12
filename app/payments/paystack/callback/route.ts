@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     if (!payment) return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
     const verified = await verifyPaystackTransaction(reference)
     const result = await reconcilePaystackPayment(payment.id, verified)
+    if (!result.payment) throw new Error('Payment reconciliation returned no payment')
     const target = new URL('/dashboard', url.origin)
     target.searchParams.set('payment', result.payment.status.toLowerCase())
     target.searchParams.set('reference', reference)
