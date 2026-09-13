@@ -27,7 +27,6 @@ before(async () => {
 after(async () => {
   if (!enabled) return
   try {
-    await prisma.user.deleteMany({ where: { id: { in: [customer.id, admin.id] } } })
     await Promise.all([customer, admin].map((u) => auth.deleteUser(u.id)))
   } finally {
     await prisma.$disconnect()
