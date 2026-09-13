@@ -103,6 +103,7 @@ jobs:
       - run: pnpm exec tsx --test tests/e2e/kyc-document-pdf-storage.test.ts
       - run: pnpm exec tsx --test tests/e2e/admin-authorization.test.ts
       - run: pnpm exec tsx --test tests/e2e/realtime-authorization.test.ts
+      - run: pnpm exec tsx --test tests/e2e/marketplace-orders-business-analytics-assets.test.ts
       - name: Dump application log on failure
         if: failure()
         run: cat /tmp/cloudie-e2e.log || true
