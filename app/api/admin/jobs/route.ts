@@ -3,6 +3,13 @@ import { Prisma } from '@prisma/client'
 import { requireSuperAdmin } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
 
+function errorStatus(error: unknown, fallback = 400) {
+  const message = error instanceof Error ? error.message : ''
+  if (message === 'Authentication required') return 401
+  if (message.includes('access required') || message.includes('Forbidden')) return 403
+  return fallback
+}
+
 export async function GET() {
   try {
     await requireSuperAdmin()
@@ -10,7 +17,7 @@ export async function GET() {
     return NextResponse.json({ jobs })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load jobs'
-    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 403 })
+    return NextResponse.json({ error: message }, { status: errorStatus(error, 403) })
   }
 }
 
@@ -26,6 +33,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ job: rows[0] })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to retry job'
-    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 400 })
+    return NextResponse.json({ error: message }, { status: errorStatus(error) })
   }
 }
