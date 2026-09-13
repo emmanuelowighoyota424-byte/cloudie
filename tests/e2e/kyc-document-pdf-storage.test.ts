@@ -40,6 +40,11 @@ before(async () => {
   customer = await auth.saveUser(auth.createUser({ email: `${prefix}-customer@example.test`, name: 'Acceptance Customer', emailVerified: true }))
   otherUser = await auth.saveUser(auth.createUser({ email: `${prefix}-other@example.test`, name: 'Acceptance Other', emailVerified: true }))
   admin = await auth.saveUser(auth.createUser({ email: `${prefix}-admin@example.test`, name: 'Acceptance Admin', emailVerified: true, role: 'SUPER_ADMIN' }))
+  // The application authorizes from its Prisma User row. Assert the fixture's
+  // authoritative role rather than relying on test-utils metadata alone.
+  await prisma.user.update({ where: { id: admin.id }, data: { role: 'SUPER_ADMIN' } })
+  const persistedAdmin = await prisma.user.findUnique({ where: { id: admin.id }, select: { role: true } })
+  assert.equal(persistedAdmin?.role, 'SUPER_ADMIN')
   workspaceA = await prisma.workspace.create({ data: { name: `${prefix} A`, slug: `${prefix}-a`, ownerId: customer.id, members: { create: [{ userId: customer.id, role: 'WORKSPACE_ADMIN' }] } } })
   workspaceB = await prisma.workspace.create({ data: { name: `${prefix} B`, slug: `${prefix}-b`, ownerId: otherUser.id, members: { create: [{ userId: otherUser.id, role: 'WORKSPACE_ADMIN' }] } } })
 })
