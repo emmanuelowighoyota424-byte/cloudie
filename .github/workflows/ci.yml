@@ -72,6 +72,8 @@ jobs:
       NEXT_PUBLIC_APP_URL: http://127.0.0.1:3000
       E2E_BASE_URL: http://127.0.0.1:3000
       NODE_ENV: development
+      CLOUDIE_STORAGE_DRIVER: filesystem
+      CLOUDIE_STORAGE_ROOT: /tmp/cloudie-e2e-storage
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -98,6 +100,7 @@ jobs:
       - run: pnpm exec tsx --test tests/e2e/platform-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/webhook-job-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/acceptance-gates.test.ts
+      - run: pnpm exec tsx --test tests/e2e/kyc-document-pdf-storage.test.ts
       - name: Dump application log on failure
         if: failure()
         run: cat /tmp/cloudie-e2e.log || true
