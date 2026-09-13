@@ -21,7 +21,8 @@ before(async () => {
   auth = await getTestAuth()
   const prefix = `admin-auth-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`
   customer = await auth.saveUser(auth.createUser({ email: `${prefix}-customer@example.test`, name: 'Admin Matrix Customer', emailVerified: true }))
-  admin = await auth.saveUser(auth.createUser({ email: `${prefix}-admin@example.test`, name: 'Admin Matrix Admin', emailVerified: true, role: 'SUPER_ADMIN' }))
+  admin = await auth.saveUser(auth.createUser({ email: `${prefix}-admin@example.test`, name: 'Admin Matrix Admin', emailVerified: true }))
+  await prisma.user.update({ where: { id: admin.id }, data: { role: 'SUPER_ADMIN' } })
 })
 
 after(async () => {
