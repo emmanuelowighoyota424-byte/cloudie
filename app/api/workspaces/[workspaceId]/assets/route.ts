@@ -10,7 +10,7 @@ export async function GET(_: Request, context: { params: Promise<{ workspaceId: 
   try {
     const { workspaceId } = await context.params
     const { user } = await requireWorkspaceMember(workspaceId)
-    const assets = await prisma.$queryRaw(Prisma.sql`SELECT "id","filename","mimeType","sizeBytes","url","width","height","createdAt" FROM "CloudieAsset" WHERE "workspaceId"=${workspaceId} AND "deletedAt" IS NULL ORDER BY "createdAt" DESC LIMIT 200`)
+    const assets = await prisma.$queryRaw(Prisma.sql`SELECT "id","filename","mimeType","sizeBytes"::text AS "sizeBytes","url","width","height","createdAt" FROM "CloudieAsset" WHERE "workspaceId"=${workspaceId} AND "deletedAt" IS NULL ORDER BY "createdAt" DESC LIMIT 200`)
     return NextResponse.json({ assets, viewer: user.id })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load assets'
