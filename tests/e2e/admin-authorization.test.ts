@@ -26,7 +26,12 @@ before(async () => {
 
 after(async () => {
   if (!enabled) return
-  await prisma.user.deleteMany({ where: { id: { in: [customer.id, admin.id] } } })
+  try {
+    await prisma.user.deleteMany({ where: { id: { in: [customer.id, admin.id] } } })
+    await Promise.all([customer, admin].map((u) => auth.deleteUser(u.id)))
+  } finally {
+    await prisma.$disconnect()
+  }
 })
 
 test('ordinary customer cannot invoke platform-admin read or mutation endpoints directly', { skip: !enabled }, async () => {
