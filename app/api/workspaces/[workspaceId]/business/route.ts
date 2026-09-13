@@ -41,8 +41,13 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
       if (!userId) return NextResponse.json({ error: 'userId is required' }, { status: 400 })
       const member = await prisma.workspaceMember.findUnique({ where: { workspaceId_userId: { workspaceId, userId } } })
       if (!member) return NextResponse.json({ error: 'User is not a workspace member' }, { status: 400 })
+      const departmentId = typeof body?.departmentId === 'string' ? body.departmentId : null
+      if (departmentId) {
+        const department = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "BusinessDepartment" WHERE "id"=${departmentId} AND "workspaceId"=${workspaceId} LIMIT 1`)
+        if (!department.length) return NextResponse.json({ error: 'Department not found' }, { status: 404 })
+      }
       const id = crypto.randomUUID()
-      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessStaff" ("id","workspaceId","userId","departmentId","role") VALUES (${id},${workspaceId},${userId},${typeof body?.departmentId === 'string' ? body.departmentId : null},${role}) ON CONFLICT ("workspaceId","userId") DO UPDATE SET "role"=EXCLUDED."role","departmentId"=EXCLUDED."departmentId","updatedAt"=CURRENT_TIMESTAMP`)
+      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessStaff" ("id","workspaceId","userId","departmentId","role") VALUES (${id},${workspaceId},${userId},${departmentId},${role}) ON CONFLICT ("workspaceId","userId") DO UPDATE SET "role"=EXCLUDED."role","departmentId"=EXCLUDED."departmentId","updatedAt"=CURRENT_TIMESTAMP`)
       await prisma.auditLog.create({ data: { actorId: user.id, workspaceId, action: 'business.staff_changed', entity: 'BusinessStaff', entityId: id, metadata: { userId, role } } })
       return NextResponse.json({ id }, { status: 201 })
     }
@@ -53,8 +58,15 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
       const subtotal = Number(body?.subtotal ?? 0)
       const tax = Number(body?.tax ?? 0)
       if (!number || !items.length || !Number.isFinite(subtotal) || !Number.isFinite(tax)) return NextResponse.json({ error: 'Invoice number, items and valid totals are required' }, { status: 400 })
+      const customerId = typeof body?.customerId === 'string' ? body.customerId : null
+      if (customerId) {
+        const customer = await prisma.customer.findFirst({ where: { id: customerId, workspaceId }, select: { id: true } })
+        if (!customer) return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      }
       const id = crypto.randomUUID()
-      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessInvoice" ("id","workspaceId","customerId","createdById","number","currency","subtotal","tax","total","dueAt","items") VALUES (${id},${workspaceId},${typeof body?.customerId === 'string' ? body.customerId : null},${user.id},${number},${currency},${subtotal},${tax},${subtotal + tax},${typeof body?.dueAt === 'string' ? new Date(body.dueAt) : null},${JSON.stringify(items)}::jsonb)`)
+      const dueAt = typeof body?.dueAt === 'string' ? new Date(body.dueAt) : null
+      if (dueAt && Number.isNaN(dueAt.getTime())) return NextResponse.json({ error: 'Invalid dueAt' }, { status: 400 })
+      await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessInvoice" ("id","workspaceId","customerId","createdById","number","currency","subtotal","tax","total","dueAt","items") VALUES (${id},${workspaceId},${customerId},${user.id},${number},${currency},${subtotal},${tax},${subtotal + tax},${dueAt},${JSON.stringify(items)}::jsonb)`)
       return NextResponse.json({ id }, { status: 201 })
     }
     return NextResponse.json({ error: 'Unsupported business action' }, { status: 400 })
