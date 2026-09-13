@@ -5,7 +5,18 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export async function GET(request: Request) {
-  const user = await requireUser()
+  let user
+  try {
+    user = await requireUser()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Authentication required'
+    const status = message === 'Authentication required' ? 401 : 403
+    return new Response(JSON.stringify({ error: message }), {
+      status,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    })
+  }
+
   const encoder = new TextEncoder()
   let closed = false
   const stream = new ReadableStream({
