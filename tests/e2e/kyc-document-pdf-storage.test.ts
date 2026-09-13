@@ -46,16 +46,20 @@ before(async () => {
 
 after(async () => {
   if (!enabled) return
-  await Promise.all(storageKeys.map((key) => deletePrivateObject(key).catch(() => undefined)))
-  await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCEvent" WHERE "kycId" IN (SELECT "id" FROM "KYCVerification" WHERE "userId"=${customer.id})`)
-  await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCSubmission" WHERE "userId"=${customer.id}`)
-  await prisma.kYCVerification.deleteMany({ where: { userId: customer.id } })
-  if (renderedId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "RenderedDocument" WHERE "id"=${renderedId}`)
-  if (templateId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplateVersion" WHERE "templateId"=${templateId}`)
-  if (templateId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplate" WHERE "id"=${templateId}`)
-  await prisma.workspaceMember.deleteMany({ where: { workspaceId: { in: [workspaceA.id, workspaceB.id] } } })
-  await prisma.workspace.deleteMany({ where: { id: { in: [workspaceA.id, workspaceB.id] } } })
-  await Promise.all([customer, otherUser, admin].map((u) => auth.deleteUser(u.id)))
+  try {
+    await Promise.all(storageKeys.map((key) => deletePrivateObject(key).catch(() => undefined)))
+    await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCEvent" WHERE "kycId" IN (SELECT "id" FROM "KYCVerification" WHERE "userId"=${customer.id})`)
+    await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCSubmission" WHERE "userId"=${customer.id}`)
+    await prisma.kYCVerification.deleteMany({ where: { userId: customer.id } })
+    if (renderedId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "RenderedDocument" WHERE "id"=${renderedId}`)
+    if (templateId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplateVersion" WHERE "templateId"=${templateId}`)
+    if (templateId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplate" WHERE "id"=${templateId}`)
+    await prisma.workspaceMember.deleteMany({ where: { workspaceId: { in: [workspaceA.id, workspaceB.id] } } })
+    await prisma.workspace.deleteMany({ where: { id: { in: [workspaceA.id, workspaceB.id] } } })
+    await Promise.all([customer, otherUser, admin].map((u) => auth.deleteUser(u.id)))
+  } finally {
+    await prisma.$disconnect()
+  }
 })
 
 test('unauthenticated KYC and document endpoints are denied', { skip: !enabled }, async () => {
@@ -87,7 +91,6 @@ test('customer KYC upload persists metadata, validates ownership, and supports m
   assert.equal(reject.response.status, 200, reject.body)
   const adminDocument = await requestBinaryAs(adminHeaders, `/api/admin/kyc/${uploaded.submissionId}/document`)
   assert.equal(adminDocument.response.status, 200); assert.equal(adminDocument.response.headers.get('content-type'), 'application/pdf'); assert.equal(new TextDecoder().decode(adminDocument.bytes.slice(0, 5)), '%PDF-')
-
   const resubmitForm = new FormData(); resubmitForm.set('documentType', 'identity'); resubmitForm.set('file', new File([new TextEncoder().encode('%PDF-1.4\nCloudie resubmission')], 'resubmission.png', { type: 'image/png' }))
   const resubmitUpload = await requestAs(customerHeaders, '/api/kyc/upload', { method: 'POST', body: resubmitForm })
   assert.equal(resubmitUpload.response.status, 201, resubmitUpload.body)
