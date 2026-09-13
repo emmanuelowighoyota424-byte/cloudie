@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { hashPassword } from 'better-auth/crypto'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
@@ -27,13 +28,40 @@ export async function POST(request: Request) {
   }
 
   const existing = await prisma.user.findUnique({ where: { email } })
+
   if (existing) {
-    if (existing.role !== 'SUPER_ADMIN' || !existing.emailVerified) {
-      await prisma.user.update({
+    const passwordHash = await hashPassword(configuredPassword)
+
+    await prisma.$transaction([
+      prisma.user.update({
         where: { id: existing.id },
-        data: { role: 'SUPER_ADMIN', emailVerified: true, suspendedAt: null },
-      })
-    }
+        data: {
+          role: 'SUPER_ADMIN',
+          emailVerified: true,
+          suspendedAt: null,
+        },
+      }),
+      prisma.account.upsert({
+        where: {
+          providerId_accountId: {
+            providerId: 'credential',
+            accountId: existing.id,
+          },
+        },
+        create: {
+          id: crypto.randomUUID(),
+          accountId: existing.id,
+          providerId: 'credential',
+          userId: existing.id,
+          password: passwordHash,
+        },
+        update: {
+          password: passwordHash,
+        },
+      }),
+      prisma.session.deleteMany({ where: { userId: existing.id } }),
+    ])
+
     return NextResponse.json({ ok: true, existing: true }, { status: 200 })
   }
 
