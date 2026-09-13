@@ -40,7 +40,7 @@ test('ordinary customer cannot invoke platform-admin read or mutation endpoints 
   for (const path of readPaths) assert.ok([401, 403].includes(await request(headers, path)), `${path} was not protected`)
   const mutations: Array<[string, string, string]> = [
     ['/api/admin/jobs', 'POST', '{}'],
-    ['/api/admin/kyc', 'POST', JSON.stringify({ action: 'review', userId: customer.id, status: 'VERIFIED' })],
+    ['/api/kyc', 'POST', JSON.stringify({ action: 'review', userId: customer.id, status: 'VERIFIED' })],
     ['/api/admin/pricing', 'POST', JSON.stringify({ action: 'create', pointCost: 1, reason: 'unauthorized' })],
     ['/api/admin/vendors', 'POST', JSON.stringify({ name: 'Unauthorized Vendor', category: 'test' })],
     [`/api/admin/vendors/${crypto.randomUUID()}`, 'PATCH', JSON.stringify({ status: 'SUSPENDED' })],
