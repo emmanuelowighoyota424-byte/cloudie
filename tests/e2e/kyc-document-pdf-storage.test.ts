@@ -15,9 +15,7 @@ let workspaceA: { id: string }
 let workspaceB: { id: string }
 let templateId = ''
 let renderedId = ''
-let kycId = ''
-let submissionId = ''
-let storageKey = ''
+let storageKeys: string[] = []
 
 async function headersFor(userId: string) { return auth.getAuthHeaders({ userId }) }
 async function requestAs(headers: Headers, path: string, init: RequestInit = {}) {
@@ -48,15 +46,13 @@ before(async () => {
 
 after(async () => {
   if (!enabled) return
-  if (storageKey) await deletePrivateObject(storageKey).catch(() => undefined)
+  await Promise.all(storageKeys.map((key) => deletePrivateObject(key).catch(() => undefined)))
+  await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCEvent" WHERE "kycId" IN (SELECT "id" FROM "KYCVerification" WHERE "userId"=${customer.id})`)
+  await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCSubmission" WHERE "userId"=${customer.id}`)
+  await prisma.kYCVerification.deleteMany({ where: { userId: customer.id } })
   if (renderedId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "RenderedDocument" WHERE "id"=${renderedId}`)
   if (templateId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplateVersion" WHERE "templateId"=${templateId}`)
   if (templateId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "DocumentTemplate" WHERE "id"=${templateId}`)
-  if (submissionId) await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCSubmission" WHERE "id"=${submissionId}`)
-  if (kycId) {
-    await prisma.$executeRaw(Prisma.sql`DELETE FROM "KYCEvent" WHERE "kycId"=${kycId}`)
-    await prisma.kYCVerification.delete({ where: { id: kycId } }).catch(() => undefined)
-  }
   await prisma.workspaceMember.deleteMany({ where: { workspaceId: { in: [workspaceA.id, workspaceB.id] } } })
   await prisma.workspace.deleteMany({ where: { id: { in: [workspaceA.id, workspaceB.id] } } })
   await Promise.all([customer, otherUser, admin].map((u) => auth.deleteUser(u.id)))
@@ -79,22 +75,29 @@ test('customer KYC upload persists metadata, validates ownership, and supports m
   const upload = await requestAs(customerHeaders, '/api/kyc/upload', { method: 'POST', body: form })
   assert.equal(upload.response.status, 201, upload.body)
   const uploaded = JSON.parse(upload.body) as { kycId: string; submissionId: string; storageKey: string; originalFilename: string; mimeType: string; sizeBytes: number }
-  kycId = uploaded.kycId; submissionId = uploaded.submissionId; storageKey = uploaded.storageKey
-  assert.equal(uploaded.mimeType, 'application/pdf'); assert.ok(uploaded.originalFilename.includes('passport_final_.pdf')); assert.ok(storageKey.startsWith(`kyc/${customer.id}/`))
-  assert.equal(await storageExists(storageKey), true)
-  assert.equal((await getPrivateObjectMetadata(storageKey)).contentLength, String(uploaded.sizeBytes))
-  assert.equal((await requestAs(customerHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit', submissionId }) })).response.status, 201)
-  await expectDenied(otherHeaders, `/api/admin/kyc/${submissionId}/document`)
-  assert.equal((await requestAs(otherHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review', userId: customer.id, status: 'APPROVED' }) })).response.status, 400)
+  storageKeys.push(uploaded.storageKey)
+  assert.equal(uploaded.mimeType, 'application/pdf'); assert.ok(uploaded.originalFilename.includes('passport_final_.pdf')); assert.ok(uploaded.storageKey.startsWith(`kyc/${customer.id}/`))
+  assert.equal(await storageExists(uploaded.storageKey), true)
+  assert.equal((await getPrivateObjectMetadata(uploaded.storageKey)).contentLength, String(uploaded.sizeBytes))
+  assert.equal((await requestAs(customerHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit', submissionId: uploaded.submissionId }) })).response.status, 201)
+  await expectDenied(otherHeaders, `/api/admin/kyc/${uploaded.submissionId}/document`)
+  assert.equal((await requestAs(otherHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review', userId: customer.id, status: 'APPROVED' }) })).response.status, 403)
   assert.equal((await requestAs(adminHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review', userId: customer.id, status: 'REJECTED' }) })).response.status, 400)
   const reject = await requestAs(adminHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review', userId: customer.id, status: 'REJECTED', reason: 'Document is unreadable' }) })
   assert.equal(reject.response.status, 200, reject.body)
-  const adminDocument = await requestBinaryAs(adminHeaders, `/api/admin/kyc/${submissionId}/document`)
+  const adminDocument = await requestBinaryAs(adminHeaders, `/api/admin/kyc/${uploaded.submissionId}/document`)
   assert.equal(adminDocument.response.status, 200); assert.equal(adminDocument.response.headers.get('content-type'), 'application/pdf'); assert.equal(new TextDecoder().decode(adminDocument.bytes.slice(0, 5)), '%PDF-')
-  assert.equal((await requestAs(customerHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit', submissionId }) })).response.status, 201)
+
+  const resubmitForm = new FormData(); resubmitForm.set('documentType', 'identity'); resubmitForm.set('file', new File([new TextEncoder().encode('%PDF-1.4\nCloudie resubmission')], 'resubmission.png', { type: 'image/png' }))
+  const resubmitUpload = await requestAs(customerHeaders, '/api/kyc/upload', { method: 'POST', body: resubmitForm })
+  assert.equal(resubmitUpload.response.status, 201, resubmitUpload.body)
+  const resubmitted = JSON.parse(resubmitUpload.body) as { kycId: string; submissionId: string; storageKey: string }
+  storageKeys.push(resubmitted.storageKey)
+  assert.notEqual(resubmitted.kycId, uploaded.kycId)
+  assert.equal((await requestAs(customerHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'submit', submissionId: resubmitted.submissionId }) })).response.status, 201)
   const approve = await requestAs(adminHeaders, '/api/kyc', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'review', userId: customer.id, status: 'VERIFIED' }) })
   assert.equal(approve.response.status, 200, approve.body)
-  const kycEvents = await prisma.$queryRaw<Array<{ action: string; reason: string | null }>>(Prisma.sql`SELECT "action","reason" FROM "KYCEvent" WHERE "kycId"=${kycId} ORDER BY "createdAt" ASC`)
+  const kycEvents = await prisma.$queryRaw<Array<{ action: string; reason: string | null }>>(Prisma.sql`SELECT "action","reason" FROM "KYCEvent" WHERE "kycId" IN (SELECT "id" FROM "KYCVerification" WHERE "userId"=${customer.id}) ORDER BY "createdAt" ASC`)
   assert.ok(kycEvents.some((event) => event.action === 'REVIEW' && event.reason === 'Document is unreadable'))
 })
 
