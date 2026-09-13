@@ -7,6 +7,16 @@ import { isPdf, renderPdf } from '@/lib/pdf'
 
 export const runtime = 'nodejs'
 
+async function waitForRender(workspaceId: string, idempotencyKey: string) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const rows = await prisma.$queryRaw<Array<{ id: string; status: string; storageKey: string | null; metadata: any }>>(Prisma.sql`SELECT "id","status","storageKey","metadata" FROM "RenderedDocument" WHERE "workspaceId"=${workspaceId} AND "idempotencyKey"=${idempotencyKey} LIMIT 1`)
+    const document = rows[0]
+    if (!document || document.status !== 'PROCESSING') return document
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error('Timed out waiting for concurrent document rendering')
+}
+
 export async function POST(request: Request, context: { params: Promise<{ workspaceId: string }> }) {
   try {
     const { workspaceId } = await context.params
@@ -17,16 +27,25 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     const version = Number.isInteger(body.version) ? Number(body.version) : null
     const idempotencyKey = request.headers.get('Idempotency-Key')?.trim() || (typeof body.idempotencyKey === 'string' ? body.idempotencyKey.trim() : '')
     if (!templateId || !idempotencyKey) return NextResponse.json({ error: 'templateId and Idempotency-Key are required' }, { status: 400 })
+
     const existing = await prisma.$queryRaw<Array<{ id: string; status: string; storageKey: string | null; metadata: any }>>(Prisma.sql`SELECT "id","status","storageKey","metadata" FROM "RenderedDocument" WHERE "workspaceId"=${workspaceId} AND "idempotencyKey"=${idempotencyKey} LIMIT 1`)
-    if (existing[0]) return NextResponse.json({ renderedDocument: existing[0], replay: true })
+    if (existing[0]) {
+      const completed = existing[0].status === 'PROCESSING' ? await waitForRender(workspaceId, idempotencyKey) : existing[0]
+      if (!completed) return NextResponse.json({ error: 'Rendered document not found' }, { status: 404 })
+      if (completed.status === 'FAILED') return NextResponse.json({ renderedDocument: completed, replay: true }, { status: 409 })
+      return NextResponse.json({ renderedDocument: completed, replay: true })
+    }
+
     const templates = await prisma.$queryRaw<Array<{ id: string; versionId: string; version: number; content: any }>>(Prisma.sql`SELECT t."id",v."id" AS "versionId",v."version",v."content" FROM "DocumentTemplate" t JOIN "DocumentTemplateVersion" v ON v."templateId"=t."id" WHERE t."id"=${templateId} AND (t."workspaceId"=${workspaceId} OR t."workspaceId" IS NULL) AND t."active"=TRUE AND (${version}::integer IS NULL OR v."version"=${version}) ORDER BY v."version" DESC LIMIT 1`)
     const template = templates[0]
     if (!template) return NextResponse.json({ error: 'Template or version not found' }, { status: 404 })
     const id = crypto.randomUUID()
     const created = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`INSERT INTO "RenderedDocument" ("id","workspaceId","templateId","templateVersionId","ownerId","status","idempotencyKey") VALUES (${id},${workspaceId},${template.id},${template.versionId},${user.id},'PROCESSING',${idempotencyKey}) ON CONFLICT DO NOTHING RETURNING "id"`)
     if (!created[0]) {
-      const replay = await prisma.$queryRaw<Array<{ id: string; status: string; storageKey: string | null; metadata: any }>>(Prisma.sql`SELECT "id","status","storageKey","metadata" FROM "RenderedDocument" WHERE "workspaceId"=${workspaceId} AND "idempotencyKey"=${idempotencyKey} LIMIT 1`)
-      return NextResponse.json({ renderedDocument: replay[0], replay: true })
+      const replay = await waitForRender(workspaceId, idempotencyKey)
+      if (!replay) return NextResponse.json({ error: 'Rendered document not found' }, { status: 404 })
+      if (replay.status === 'FAILED') return NextResponse.json({ renderedDocument: replay, replay: true }, { status: 409 })
+      return NextResponse.json({ renderedDocument: replay, replay: true })
     }
     try {
       const bytes = renderPdf(template.content)
