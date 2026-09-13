@@ -61,6 +61,22 @@ export async function getPrivateObject(pathname: string) {
   return response
 }
 
+export async function storageExists(pathname: string) {
+  const { bearer, storeId } = resolveAuth()
+  const response = await fetch(`https://${storeId}.private.blob.vercel-storage.com/${pathname}`, { method: 'HEAD', headers: { authorization: `Bearer ${bearer}` }, cache: 'no-store' })
+  if (response.status === 404) return false
+  if (!response.ok) throw new Error(`Storage metadata check failed (${response.status})`)
+  return true
+}
+
+export async function getPrivateObjectMetadata(pathname: string) {
+  const { bearer, storeId } = resolveAuth()
+  const response = await fetch(`https://${storeId}.private.blob.vercel-storage.com/${pathname}`, { method: 'HEAD', headers: { authorization: `Bearer ${bearer}` }, cache: 'no-store' })
+  if (response.status === 404) throw new Error('Document not found in storage')
+  if (!response.ok) throw new Error(`Storage metadata read failed (${response.status})`)
+  return { contentType: response.headers.get('content-type'), contentLength: response.headers.get('content-length'), etag: response.headers.get('etag') }
+}
+
 export async function deletePrivateObject(url: string) {
   const { bearer } = resolveAuth()
   const response = await fetch(`${BLOB_API}/delete`, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', 'x-api-version': '12' }, body: JSON.stringify({ urls: [url] }) })
