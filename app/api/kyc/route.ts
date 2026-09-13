@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
-import { requireSuperAdmin, requireUser } from '@/lib/authorization'
+import { AuthorizationError, requireSuperAdmin, requireUser } from '@/lib/authorization'
 import { getPrivateObject } from '@/lib/storage'
 import { prisma } from '@/lib/prisma'
 
@@ -21,7 +21,7 @@ export async function GET() {
     return NextResponse.json({ kyc, submissions })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load KYC'
-    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 403 })
+    return NextResponse.json({ error: message }, { status: message === 'Authentication required' ? 401 : 403 })
   }
 }
 
@@ -81,6 +81,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unsupported KYC action' }, { status: 400 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to process KYC'
-    return NextResponse.json({ error: message }, { status: message.includes('Authentication') ? 401 : 400 })
+    const status = error instanceof AuthorizationError ? (message === 'Authentication required' ? 401 : 403) : 400
+    return NextResponse.json({ error: message }, { status })
   }
 }
