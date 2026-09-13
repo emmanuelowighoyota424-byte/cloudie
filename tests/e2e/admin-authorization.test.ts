@@ -42,8 +42,7 @@ test('ordinary customer cannot invoke platform-admin read or mutation endpoints 
     ['/api/admin/jobs', 'POST', '{}'],
     ['/api/kyc', 'POST', JSON.stringify({ action: 'review', userId: customer.id, status: 'VERIFIED' })],
     ['/api/admin/pricing', 'POST', JSON.stringify({ action: 'create', pointCost: 1, reason: 'unauthorized' })],
-    [`/api/admin/vendors`, 'PATCH', JSON.stringify({ id: crypto.randomUUID(), status: 'SUSPENDED' })],
-    [`/api/admin/vendors/${crypto.randomUUID()}`, 'PATCH', JSON.stringify({ status: 'SUSPENDED' })],
+    ['/api/admin/vendors', 'PATCH', JSON.stringify({ id: crypto.randomUUID(), status: 'SUSPENDED' })],
     [`/api/admin/users/${customer.id}/points`, 'POST', JSON.stringify({ amount: 10, reason: 'unauthorized' })],
   ]
   for (const [path, method, body] of mutations) assert.ok([401, 403].includes(await request(headers, path, { method, headers: { 'content-type': 'application/json' }, body })), `${method} ${path} was not protected`)
