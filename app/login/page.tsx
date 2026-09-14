@@ -1,20 +1,24 @@
 'use client'
 
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authClient } from '@/lib/auth-client'
 
 export default function LoginPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState(searchParams.get('registered') ? 'Account created. Verify your email before signing in.' : '')
+  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [resending, setResending] = useState(false)
   const [resent, setResent] = useState(false)
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('registered')) {
+      setError('Account created. Verify your email before signing in.')
+    }
+  }, [])
 
   async function resendVerification() {
     const normalizedEmail = email.trim().toLowerCase()
