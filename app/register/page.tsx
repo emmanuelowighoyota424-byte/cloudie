@@ -2,12 +2,11 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { authClient } from '@/lib/auth-client'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -15,9 +14,9 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    const ref = searchParams.get('ref')?.trim().toUpperCase()
+    const ref = new URLSearchParams(window.location.search).get('ref')?.trim().toUpperCase()
     if (ref && /^CLD-[A-F0-9]{12}$/.test(ref)) localStorage.setItem('cloudie-referral-code', ref)
-  }, [searchParams])
+  }, [])
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
