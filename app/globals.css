@@ -33,7 +33,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
+  --color-card: var(--card-foreground);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --radius-sm: calc(var(--radius) * 0.6);
@@ -154,10 +154,16 @@
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+}
+
+@page { size: A4; margin: 16mm; }
+@media print {
+  html, body { background: white !important; color: black !important; }
+  body { font-size: 11pt; }
+  header, nav, button, input, textarea, select, aside { display: none !important; }
+  main { max-width: none !important; padding: 0 !important; }
+  section, article { break-inside: avoid; box-shadow: none !important; border-color: #d1d5db !important; }
+  a { color: inherit !important; text-decoration: none !important; }
 }
