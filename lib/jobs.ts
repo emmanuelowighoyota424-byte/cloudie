@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { sendEmail } from '@/lib/email'
+import { chargeForAction } from '@/lib/billing'
 
 export async function enqueueJob(type: string, payload: unknown, options: { workspaceId?: string; idempotencyKey?: string; runAt?: Date } = {}) {
   const id = crypto.randomUUID()
@@ -18,41 +19,34 @@ export async function enqueueEmail(input: { to: string; subject: string; templat
 }
 
 export async function processDueJobs(limit = 10) {
-  const jobs = await prisma.$queryRaw<Array<{ id: string; type: string; payload: { emailId?: string; campaignId?: string }; attempts: number; maxAttempts: number }>>(Prisma.sql`UPDATE "CloudieJob" SET "status"='PROCESSING',"startedAt"=CURRENT_TIMESTAMP,"attempts"="attempts"+1,"updatedAt"=CURRENT_TIMESTAMP WHERE "id" IN (SELECT "id" FROM "CloudieJob" WHERE "status" IN ('PENDING','RETRY') AND "runAt"<=CURRENT_TIMESTAMP ORDER BY "runAt" ASC LIMIT ${limit} FOR UPDATE SKIP LOCKED) RETURNING *`)
+  const jobs = await prisma.$queryRaw<Array<{ id: string; type: string; workspaceId: string | null; payload: { emailId?: string; campaignId?: string }; attempts: number; maxAttempts: number }>>(Prisma.sql`UPDATE "CloudieJob" SET "status"='PROCESSING',"startedAt"=CURRENT_TIMESTAMP,"attempts"="attempts"+1,"updatedAt"=CURRENT_TIMESTAMP WHERE "id" IN (SELECT "id" FROM "CloudieJob" WHERE "status" IN ('PENDING','RETRY') AND "runAt"<=CURRENT_TIMESTAMP ORDER BY "runAt" ASC LIMIT ${limit} FOR UPDATE SKIP LOCKED) RETURNING *`)
   let processed = 0
   for (const job of jobs) {
     try {
       if (job.type === 'email.send' && job.payload.emailId) {
-        const rows = await prisma.$queryRaw<Array<{ id: string; recipient: string; subject: string; payload: Record<string, unknown>; status: string; idempotencyKey: string | null }>>(Prisma.sql`SELECT "id","recipient","subject","payload","status","idempotencyKey" FROM "EmailMessage" WHERE "id"=${job.payload.emailId} LIMIT 1`)
+        const rows = await prisma.$queryRaw<Array<{ id: string; workspaceId: string | null; userId: string | null; recipient: string; subject: string; payload: Record<string, unknown>; status: string; idempotencyKey: string | null }>>(Prisma.sql`SELECT "id","workspaceId","userId","recipient","subject","payload","status","idempotencyKey" FROM "EmailMessage" WHERE "id"=${job.payload.emailId} LIMIT 1`)
         const email = rows[0]
         if (!email) throw new Error('Email job target not found')
         if (email.status === 'SENT') { await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"='COMPLETED',"finishedAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`); processed++; continue }
         const html = typeof email.payload.html === 'string' ? email.payload.html : `<p>${String(email.payload.text ?? '')}</p>`
         const text = typeof email.payload.text === 'string' ? email.payload.text : String(email.payload.message ?? '')
         await sendEmail({ to: email.recipient, subject: email.subject, html, text, idempotencyKey: email.idempotencyKey ?? `email:${email.id}` })
+        if (email.workspaceId) await chargeForAction({userId:email.userId ?? '',workspaceId:email.workspaceId,action:'services.email_sent',description:`Email sent to ${email.recipient}`,reference:`email:${email.id}`})
         await prisma.$executeRaw(Prisma.sql`UPDATE "EmailMessage" SET "status"='SENT',"sentAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${email.id} AND "status"<>'SENT'`)
       } else if (job.type === 'campaign.send' && job.payload.campaignId) {
         const rows = await prisma.$queryRaw<Array<{ id: string; workspaceId: string; subject: string; template: string; audience: string[]; status: string }>>(Prisma.sql`UPDATE "EmailCampaign" SET "status"='PROCESSING',"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.payload.campaignId} AND "status" NOT IN ('PROCESSING','SENT','CANCELLED') RETURNING "id","workspaceId","subject","template","audience","status"`)
         const campaign = rows[0]
-        if (!campaign) {
-          const existing = await prisma.$queryRaw<Array<{ status: string }>>(Prisma.sql`SELECT "status" FROM "EmailCampaign" WHERE "id"=${job.payload.campaignId} LIMIT 1`)
-          if (existing[0]?.status === 'SENT') { await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"='COMPLETED',"finishedAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`); processed++; continue }
-          throw new Error('Campaign is unavailable or already processing')
-        }
+        if (!campaign) { const existing = await prisma.$queryRaw<Array<{ status: string }>>(Prisma.sql`SELECT "status" FROM "EmailCampaign" WHERE "id"=${job.payload.campaignId} LIMIT 1`); if (existing[0]?.status === 'SENT') { await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"='COMPLETED',"finishedAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`); processed++; continue }; throw new Error('Campaign is unavailable or already processing') }
         let failed = 0
-        for (const recipient of campaign.audience) {
-          try { await enqueueEmail({ to: recipient, subject: campaign.subject, template: campaign.template, payload: { text: campaign.template }, workspaceId: campaign.workspaceId, idempotencyKey: `campaign-email:${campaign.id}:${recipient}` }) } catch { failed++ }
-        }
-        await prisma.$executeRaw(Prisma.sql`UPDATE "EmailCampaign" SET "status"='SENT',"sentCount"="sentCount"+${campaign.audience.length - failed},"failedCount"="failedCount"+${failed},"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${campaign.id} AND "status"='PROCESSING'`)
+        for (const recipient of campaign.audience) { try { await enqueueEmail({to:recipient,subject:campaign.subject,template:campaign.template,payload:{text:campaign.template},workspaceId:campaign.workspaceId,idempotencyKey:`campaign-email:${campaign.id}:${recipient}`}) } catch { failed++ } }
+        await prisma.$executeRaw(Prisma.sql`UPDATE "EmailCampaign" SET "status"=${failed?'PARTIAL':'SENT'},"sentCount"="sentCount"+${campaign.audience.length-failed},"failedCount"="failedCount"+${failed},"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${campaign.id} AND "status"='PROCESSING'`)
       } else throw new Error(`Unsupported job type: ${job.type}`)
-      await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"='COMPLETED',"finishedAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`)
-      processed++
+      await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"='COMPLETED',"finishedAt"=CURRENT_TIMESTAMP,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`); processed++
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Job failed'
-      const retry = job.attempts < job.maxAttempts
-      await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"=${retry ? 'RETRY' : 'FAILED'},"lastError"=${message.slice(0,1000)},"runAt"=CURRENT_TIMESTAMP + (${Math.min(300, 2 ** job.attempts)} * INTERVAL '1 second'),"finishedAt"=CASE WHEN ${retry} THEN "finishedAt" ELSE CURRENT_TIMESTAMP END,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`)
-      if (job.type === 'email.send' && job.payload.emailId) await prisma.$executeRaw(Prisma.sql`UPDATE "EmailMessage" SET "status"=${retry ? 'QUEUED' : 'FAILED'},"attempts"="attempts"+1,"lastError"=${message.slice(0,1000)},"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.payload.emailId} AND "status"<>'SENT'`)
+      const message = error instanceof Error ? error.message : 'Job failed'; const retry = job.attempts < job.maxAttempts
+      await prisma.$executeRaw(Prisma.sql`UPDATE "CloudieJob" SET "status"=${retry?'RETRY':'FAILED'},"lastError"=${message.slice(0,1000)},"runAt"=CURRENT_TIMESTAMP + (${Math.min(300,2**job.attempts)} * INTERVAL '1 second'),"finishedAt"=CASE WHEN ${retry} THEN "finishedAt" ELSE CURRENT_TIMESTAMP END,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.id}`)
+      if (job.type==='email.send'&&job.payload.emailId) await prisma.$executeRaw(Prisma.sql`UPDATE "EmailMessage" SET "status"=${retry?'QUEUED':'FAILED'},"attempts"="attempts"+1,"lastError"=${message.slice(0,1000)},"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${job.payload.emailId} AND "status"<>'SENT'`)
     }
   }
-  return { processed, claimed: jobs.length }
+  return {processed,claimed:jobs.length}
 }
