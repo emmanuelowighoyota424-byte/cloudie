@@ -7,8 +7,9 @@ type Shipment = { id: string; trackingId: string; origin: string; destination: s
 
 export function ShipmentsWorkspace({ points, workspaces }: { points: number; workspaces: Workspace[] }) {
   const eligible = useMemo(() => workspaces.filter(w => ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','CUSTOMER'].includes(w.role)), [workspaces])
-  const customerMode = eligible.find(w => w.id)?.role === 'CUSTOMER'
   const [workspaceId, setWorkspaceId] = useState(eligible[0]?.id ?? '')
+  const currentWorkspace = eligible.find(w => w.id === workspaceId)
+  const customerMode = currentWorkspace?.role === 'CUSTOMER'
   const [shipments, setShipments] = useState<Shipment[]>([])
   const [origin, setOrigin] = useState('')
   const [destination, setDestination] = useState('')
@@ -18,18 +19,16 @@ export function ShipmentsWorkspace({ points, workspaces }: { points: number; wor
 
   useEffect(() => {
     if (!workspaceId) return
-    const load = async () => {
-      try {
-        const response = await fetch(`/api/workspaces/${workspaceId}/shipments`, { cache: 'no-store' })
-        const data = await response.json().catch(() => null)
-        if (!response.ok) throw new Error(data?.error ?? 'Unable to load shipments')
-        setShipments(data.shipments ?? [])
-      } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to load shipments') }
-    }
-    void load()
+    setMessage('')
+    void fetch(`/api/workspaces/${workspaceId}/shipments`, { cache: 'no-store' }).then(async response => {
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error ?? 'Unable to load shipments')
+      setShipments(data.shipments ?? [])
+    }).catch(error => setMessage(error instanceof Error ? error.message : 'Unable to load shipments'))
     void fetch(`/api/workspaces/${workspaceId}/billing/price?action=shipments.create`, { cache: 'no-store' }).then(async response => {
       const data = await response.json().catch(() => null)
       if (response.ok) setCost(Number(data.amount))
+      else setCost(null)
     }).catch(() => setCost(null))
   }, [workspaceId])
 
@@ -41,8 +40,7 @@ export function ShipmentsWorkspace({ points, workspaces }: { points: number; wor
       const response = await fetch(`/api/workspaces/${workspaceId}/shipments`, { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': `shipment-ui:${crypto.randomUUID()}` }, body: JSON.stringify({ origin, destination }) })
       const data = await response.json().catch(() => null)
       if (!response.ok) throw new Error(data?.error ?? 'Unable to create shipment')
-      setShipments(current => [data.shipment, ...current])
-      setOrigin(''); setDestination('')
+      setShipments(current => [data.shipment, ...current]); setOrigin(''); setDestination('')
       setMessage(`Shipment ${data.shipment.trackingId} created successfully. ${data.pointsCharged} Points charged.`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Unable to create shipment') }
     finally { setBusy(false) }
