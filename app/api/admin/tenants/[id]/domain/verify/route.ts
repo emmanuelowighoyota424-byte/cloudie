@@ -1,0 +1,8 @@
+import { resolveTxt } from 'node:dns/promises'
+import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { requireSuperAdmin } from '@/lib/authorization'
+import { prisma } from '@/lib/prisma'
+
+export const runtime='nodejs'
+export async function POST(_request:Request,context:{params:Promise<{id:string}>}){try{const actor=await requireSuperAdmin();const {id}=await context.params;const domain=(await prisma.$queryRaw<Array<{id:string;hostname:string;verificationToken:string;status:string}>>(Prisma.sql`SELECT "id","hostname","verificationToken","status" FROM "TenantDomain" WHERE "id"=${id} LIMIT 1`))[0];if(!domain)return NextResponse.json({error:'Domain not found'},{status:404});const records=await resolveTxt(`_cloudie-verification.${domain.hostname}`).catch(()=>[]);const values=records.flat();if(!values.includes(domain.verificationToken))return NextResponse.json({ok:false,status:'PENDING',message:'Verification TXT record was not found.'},{status:409});await prisma.$executeRaw(Prisma.sql`UPDATE "TenantDomain" SET "status"='VERIFIED',"verifiedAt"=CURRENT_TIMESTAMP,"active"=TRUE,"updatedAt"=CURRENT_TIMESTAMP WHERE "id"=${domain.id}`);await prisma.auditLog.create({data:{actorId:actor.id,workspaceId:(await prisma.$queryRaw<Array<{workspaceId:string}>>(Prisma.sql`SELECT "workspaceId" FROM "TenantDomain" WHERE "id"=${id}`))[0]?.workspaceId,action:'TENANT_DOMAIN_VERIFIED',entity:'TenantDomain',entityId:id,result:'SUCCESS',metadata:{hostname:domain.hostname}}});return NextResponse.json({ok:true,status:'VERIFIED',hostname:domain.hostname})}catch(error){const message=error instanceof Error?error.message:'Domain verification failed';return NextResponse.json({error:message},{status:500})}}
