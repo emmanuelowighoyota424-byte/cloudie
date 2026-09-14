@@ -22,10 +22,11 @@ export default function RegisterPage() {
     event.preventDefault()
     setError('')
     setLoading(true)
+    const normalizedEmail = email.trim().toLowerCase()
     try {
       const result = await authClient.signUp.email({
         name: name.trim(),
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password,
         callbackURL: '/dashboard',
       })
@@ -33,7 +34,7 @@ export default function RegisterPage() {
         setError(result.error.message || 'Unable to create account')
         return
       }
-      router.push(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`)
+      router.replace('/dashboard')
       router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to create account')
@@ -47,7 +48,7 @@ export default function RegisterPage() {
       <section className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
         <Link href="/" className="text-sm font-semibold tracking-tight">cloudie<span className="text-primary">.</span></Link>
         <h1 className="mt-8 text-2xl font-semibold tracking-tight">Create your Cloudie workspace</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Create your account. We’ll send a verification link before you can sign in.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Create your account and continue directly to your workspace.</p>
         <form onSubmit={submit} className="mt-8 space-y-4">
           <label className="block text-sm font-medium">Full name<input required minLength={2} maxLength={80} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-2 min-h-11 w-full rounded-lg border bg-background px-3 outline-none focus:ring-2 focus:ring-primary" /></label>
           <label className="block text-sm font-medium">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 min-h-11 w-full rounded-lg border bg-background px-3 outline-none focus:ring-2 focus:ring-primary" /></label>
