@@ -2,10 +2,10 @@
 
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { authClient } from '@/lib/auth-client'
 
-export default function VerifyEmailPage() {
+function VerifyEmailContent() {
   const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
@@ -51,5 +51,14 @@ export default function VerifyEmailPage() {
         <p className="mt-6 text-sm text-muted-foreground">Already verified? <Link href="/login" className="font-medium text-primary hover:underline">Return to sign in</Link></p>
       </section>
     </main>
+  )
+}
+
+
+export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-muted/40" />}>
+      <VerifyEmailContent />
+    </Suspense>
   )
 }
