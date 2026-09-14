@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requireUser } from '@/lib/authorization'
 import RealtimeBridge from './RealtimeBridge'
+import WorkspaceSwitcher from './WorkspaceSwitcher'
 
 const items = [
   ['Overview','/dashboard'], ['Wallet','/dashboard/wallet'], ['Transactions','/dashboard/transactions'], ['Orders','/dashboard/orders'], ['Crypto','/dashboard/crypto'], ['Referrals','/dashboard/referrals'], ['Notifications','/dashboard/notifications'], ['Documents','/dashboard/documents'], ['Profile & Security','/dashboard/profile'],
@@ -14,7 +15,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
         <Link href="/dashboard" className="font-semibold tracking-tight">cloudie.</Link>
-        <div className="text-right text-xs text-muted-foreground"><div>{user.name}</div><div>{user.email}</div></div>
+        <div className="flex items-center gap-3"><WorkspaceSwitcher /><div className="hidden text-right text-xs text-muted-foreground sm:block"><div>{user.name}</div><div>{user.email}</div></div></div>
       </div>
     </header>
     <div className="mx-auto grid max-w-7xl lg:grid-cols-[220px_1fr]">
