@@ -14,10 +14,10 @@ export async function GET(_: Request, context: { params: Promise<{ workspaceId: 
       prisma.customer.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, take: 100 }),
       prisma.product.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, take: 100 }),
       prisma.order.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, take: 100 }),
-      prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessInvestmentPlan" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC`),
-      prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessBillingConfig" WHERE "workspaceId"=${workspaceId} LIMIT 1`),
-      prisma.$queryRaw(Prisma.sql`SELECT "siteType","logoUrl","primaryColor","siteTitle","faviconUrl","contactEmail","lockedAt","renewalDate" FROM "TenantProfile" WHERE "workspaceId"=${workspaceId} LIMIT 1`),
-      prisma.$queryRaw(Prisma.sql`SELECT "id","hostname","status","verifiedAt","active","createdAt" FROM "TenantDomain" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC`),
+      prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`SELECT * FROM "BusinessInvestmentPlan" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC`),
+      prisma.$queryRaw<Array<{ id:string; workspaceId:string; renewalPoints:number; autoRenew:boolean; status:string; updatedAt:Date }>>(Prisma.sql`SELECT * FROM "BusinessBillingConfig" WHERE "workspaceId"=${workspaceId} LIMIT 1`),
+      prisma.$queryRaw<Array<{ siteType:string; logoUrl:string|null; primaryColor:string; siteTitle:string|null; faviconUrl:string|null; contactEmail:string|null; lockedAt:Date|null; renewalDate:Date|null }>>(Prisma.sql`SELECT "siteType","logoUrl","primaryColor","siteTitle","faviconUrl","contactEmail","lockedAt","renewalDate" FROM "TenantProfile" WHERE "workspaceId"=${workspaceId} LIMIT 1`),
+      prisma.$queryRaw<Array<{ id:string; hostname:string; status:string; verifiedAt:Date|null; active:boolean; createdAt:Date }>>(Prisma.sql`SELECT "id","hostname","status","verifiedAt","active","createdAt" FROM "TenantDomain" WHERE "workspaceId"=${workspaceId} ORDER BY "createdAt" DESC`),
     ])
     return NextResponse.json({ staff, departments, invoices, customers, products, orders, investmentPlans, billingConfig: billingConfig[0] ?? null, tenantProfile: tenantProfile[0] ?? null, domains })
   } catch (error) {
