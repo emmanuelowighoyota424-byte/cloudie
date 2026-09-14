@@ -67,8 +67,8 @@ function resolveAuth() {
 export async function putPrivateObject(pathname: string, body: ArrayBuffer, contentType: string) {
   if (useFilesystem()) {
     const target = filePath(pathname)
-    await fs.mkdir(path.dirname(target), { recursive: true })
-    await fs.writeFile(target, Buffer.from(body))
+    await fs.mkdir(/*turbopackIgnore: true*/ path.dirname(target), { recursive: true })
+    await fs.writeFile(/*turbopackIgnore: true*/ target, Buffer.from(body))
     return { pathname, url: `file://${target}`, contentType, etag: undefined }
   }
   const { bearer, storeId } = resolveAuth()
@@ -97,7 +97,7 @@ export async function putPrivateObject(pathname: string, body: ArrayBuffer, cont
 export async function getPrivateObject(pathname: string) {
   if (useFilesystem()) {
     try {
-      const body = await fs.readFile(filePath(pathname))
+      const body = await fs.readFile(/*turbopackIgnore: true*/ filePath(pathname))
       return new Response(body)
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : ''
@@ -119,7 +119,7 @@ export async function getPrivateObject(pathname: string) {
 export async function storageExists(pathname: string) {
   if (useFilesystem()) {
     try {
-      await fs.access(filePath(pathname))
+      await fs.access(/*turbopackIgnore: true*/ filePath(pathname))
       return true
     } catch {
       return false
@@ -159,8 +159,8 @@ export async function getPrivateObjectMetadata(pathname: string) {
 
 export async function deletePrivateObject(url: string) {
   if (useFilesystem()) {
-    if (url.startsWith('file://')) await fs.rm(new URL(url), { force: true })
-    else await fs.rm(filePath(url), { force: true })
+    if (url.startsWith('file://')) await fs.rm(/*turbopackIgnore: true*/ new URL(url), { force: true })
+    else await fs.rm(/*turbopackIgnore: true*/ filePath(url), { force: true })
     return
   }
   const { bearer } = resolveAuth()
