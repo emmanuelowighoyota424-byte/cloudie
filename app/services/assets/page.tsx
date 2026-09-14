@@ -1,0 +1,9 @@
+'use client'
+import { useEffect, useState } from 'react'
+
+export default function ServicesAssetsPage(){
+  const [workspaceId,setWorkspaceId]=useState(''),[assets,setAssets]=useState<Array<{id:string;filename:string;mimeType:string;sizeBytes:string;url:string;width:number|null;height:number|null;createdAt:string}>>([]),[message,setMessage]=useState('')
+  useEffect(()=>{fetch('/api/workspaces',{cache:'no-store'}).then(r=>r.json()).then(d=>{const first=d?.workspaces?.[0];if(first)setWorkspaceId(first.id)}).catch(()=>{})},[])
+  useEffect(()=>{if(!workspaceId)return;fetch(`/api/workspaces/${workspaceId}/assets`,{cache:'no-store'}).then(r=>r.json()).then(d=>{if(Array.isArray(d?.assets))setAssets(d.assets);else setMessage(d?.error??'Unable to load assets')}).catch(()=>setMessage('Unable to load assets'))},[workspaceId])
+  return <div className="mx-auto max-w-6xl space-y-6"><div><p className="text-sm text-muted-foreground">Workspace / Services / Assets</p><h1 className="text-3xl font-semibold">Asset Library</h1><p className="mt-1 text-sm text-muted-foreground">Private uploaded and generated assets owned by the active workspace.</p></div>{message&&<p className="rounded-lg bg-muted p-3 text-sm">{message}</p>}<section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{assets.map(asset=><article key={asset.id} className="overflow-hidden rounded-xl border bg-background"><div className="aspect-square bg-muted">{asset.url?<img src={asset.url} alt={asset.filename} className="h-full w-full object-cover"/>:null}</div><div className="p-4"><p className="truncate font-medium">{asset.filename}</p><p className="mt-1 text-xs text-muted-foreground">{asset.mimeType} · {Number(asset.sizeBytes).toLocaleString()} bytes</p></div></article>)}</section>{!assets.length&&<div className="rounded-xl border bg-background p-6 text-sm text-muted-foreground">No assets yet. Upload or render an asset from Picture Studio.</div>}</div>
+}
