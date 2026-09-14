@@ -1,0 +1,5 @@
+import { requireUser } from '@/lib/authorization'
+import { prisma } from '@/lib/prisma'
+import { NotificationsControls } from './NotificationsControls'
+export const dynamic='force-dynamic'
+export default async function NotificationsPage(){const user=await requireUser();const notifications=await prisma.notification.findMany({where:{userId:user.id},orderBy:{createdAt:'desc'},take:100});return <div className="space-y-5"><div><p className="text-sm text-muted-foreground">Personal</p><h1 className="text-2xl font-semibold">Notifications</h1></div><div className="rounded-xl border bg-background divide-y">{notifications.length?notifications.map(n=><div key={n.id} className="flex items-start justify-between gap-4 p-4"><div><div className="font-medium">{n.title}</div><p className="mt-1 text-sm text-muted-foreground">{n.message}</p><p className="mt-1 text-xs text-muted-foreground">{n.type} · {n.createdAt.toLocaleString()}</p></div>{!n.readAt&&<NotificationsControls id={n.id}/>}</div>):<p className="p-6 text-sm text-muted-foreground">No notifications.</p>}</div></div>}
