@@ -24,11 +24,16 @@ export async function POST(request: Request) {
   try { payload = JSON.parse(raw) as Record<string, unknown> } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   try {
-    const webhook = await prisma.webhookEvent.create({ data: { provider, eventId, payload: payload as Prisma.InputJsonValue } }).catch((error) => {
+    let webhook = await prisma.webhookEvent.create({ data: { provider, eventId, payload: payload as Prisma.InputJsonValue } }).catch((error) => {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') return null
       throw error
     })
-    if (!webhook) return NextResponse.json({ received: true, duplicate: true })
+    if (!webhook) {
+      webhook = await prisma.webhookEvent.findUnique({ where: { provider_eventId: { provider, eventId } } })
+      if (!webhook) throw new Error('Webhook event could not be loaded')
+      if (webhook.processedAt) return NextResponse.json({ received: true, duplicate: true })
+    }
+
     const status = typeof payload.status === 'string' ? payload.status.toUpperCase() : ''
     const providerReference = typeof payload.reference === 'string' ? payload.reference.trim() : ''
     const orderId = typeof payload.orderId === 'string' ? payload.orderId : ''
@@ -47,13 +52,14 @@ export async function POST(request: Request) {
       const nextOrderStatus = status === 'PAID' ? 'PROCESSING' : status === 'REFUNDED' ? 'REFUNDED' : status === 'CANCELLED' ? 'CANCELLED' : 'PENDING'
       await tx.order.update({ where: { id: orderId }, data: { paymentStatus: status, status: nextOrderStatus } })
       await tx.auditLog.create({ data: { userId: order.userId ?? undefined, workspaceId: order.workspaceId, action: `payment.${status.toLowerCase()}`, entity: 'Payment', entityId: payment.id, metadata: { provider, providerReference, orderId } } })
-      await tx.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date() } })
       return { orderId, workspaceId: order.workspaceId, userId: order.userId }
     })
+
     if (status === 'PAID' && result.userId) {
       await notifyUsers({ workspaceId: result.workspaceId, userIds: [result.userId], title: 'Payment completed', message: `Payment for order ${result.orderId} was verified.`, type: 'PAYMENT' })
       await qualifyReferralForUser(result.userId, `payment:${providerReference}`)
     }
+    await prisma.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date() } })
     return NextResponse.json({ received: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook processing failed'
