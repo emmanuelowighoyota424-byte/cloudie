@@ -22,14 +22,24 @@ export default function RegisterPage() {
     event.preventDefault()
     setError('')
     setLoading(true)
-    const result = await authClient.signUp.email({ name, email, password, callbackURL: '/dashboard' })
-    setLoading(false)
-    if (result.error) {
-      setError(result.error.message || 'Unable to create account')
-      return
+    try {
+      const result = await authClient.signUp.email({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password,
+        callbackURL: '/dashboard',
+      })
+      if (result.error) {
+        setError(result.error.message || 'Unable to create account')
+        return
+      }
+      router.push(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`)
+      router.refresh()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Unable to create account')
+    } finally {
+      setLoading(false)
     }
-    router.push('/login?registered=1')
-    router.refresh()
   }
 
   return (
@@ -37,13 +47,13 @@ export default function RegisterPage() {
       <section className="w-full max-w-md rounded-2xl border bg-card p-6 shadow-sm sm:p-8">
         <Link href="/" className="text-sm font-semibold tracking-tight">cloudie<span className="text-primary">.</span></Link>
         <h1 className="mt-8 text-2xl font-semibold tracking-tight">Create your Cloudie workspace</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Start with a secure account and create your first workspace.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Create your account. We’ll send a verification link before you can sign in.</p>
         <form onSubmit={submit} className="mt-8 space-y-4">
           <label className="block text-sm font-medium">Full name<input required minLength={2} maxLength={80} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="mt-2 min-h-11 w-full rounded-lg border bg-background px-3 outline-none focus:ring-2 focus:ring-primary" /></label>
           <label className="block text-sm font-medium">Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 min-h-11 w-full rounded-lg border bg-background px-3 outline-none focus:ring-2 focus:ring-primary" /></label>
           <label className="block text-sm font-medium">Password<input required minLength={8} maxLength={128} type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="mt-2 min-h-11 w-full rounded-lg border bg-background px-3 outline-none focus:ring-2 focus:ring-primary" /></label>
           {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
-          <button disabled={loading} className="min-h-11 w-full rounded-lg bg-primary px-4 font-medium text-primary-foreground disabled:opacity-60">{loading ? 'Creating account…' : 'Create account'}</button>
+          <button type="submit" disabled={loading} className="min-h-11 w-full rounded-lg bg-primary px-4 font-medium text-primary-foreground disabled:opacity-60">{loading ? 'Creating account…' : 'Create account'}</button>
         </form>
         <p className="mt-6 text-center text-sm text-muted-foreground">Already have an account? <Link href="/login" className="font-medium text-primary hover:underline">Sign in</Link></p>
       </section>
