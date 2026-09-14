@@ -2,8 +2,8 @@ import Link from 'next/link'
 import { Prisma } from '@prisma/client'
 import { requireSuperAdmin } from '@/lib/authorization'
 import { prisma } from '@/lib/prisma'
-import PricingControls from '@/app/admin/pricing/PricingControls'
-import JobControls from '@/app/admin/system-health/JobControls'
+import PricingControls from '@/app/admin/(protected)/pricing/PricingControls'
+import JobControls from '@/app/admin/(protected)/system-health/JobControls'
 export const dynamic='force-dynamic'
 const titles:Record<string,string>={marketplace:'Marketplace',orders:'Orders',disputes:'Disputes',transactions:'Wallet & Ledger',shipments:'Shipments',documents:'Documents',tenants:'Business Tenants',notifications:'Notifications',audit:'Audit Logs',analytics:'Analytics','system-health':'System Health',pricing:'Pricing',settings:'Settings'}
 export default async function AdminSection({params}:{params:Promise<{section:string}>}){await requireSuperAdmin();const {section}=await params;const title=titles[section]??'Administration';let rows:{id:string;label:string;meta:string}[]=[]
