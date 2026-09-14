@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { requireSuperAdmin } from '@/lib/authorization'
-import AdminSidebar from './AdminSidebar'
+import AdminSidebar from '../AdminSidebar'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   try { await requireSuperAdmin() } catch { redirect('/admin/login') }
