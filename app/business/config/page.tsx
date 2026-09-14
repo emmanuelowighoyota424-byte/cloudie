@@ -1,0 +1,6 @@
+import { requireUser } from '@/lib/authorization'
+import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { BusinessConfigClient } from './BusinessConfigClient'
+export const dynamic='force-dynamic'
+export default async function BusinessConfigPage(){const user=await requireUser();const membership=await prisma.workspaceMember.findFirst({where:{userId:user.id,status:'ACTIVE'},orderBy:{createdAt:'asc'},select:{workspaceId:true}});if(!membership)return <div className="rounded-xl border bg-background p-6">No active workspace.</div>;const [plans,billing,profile,domains]=await Promise.all([prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessInvestmentPlan" WHERE "workspaceId"=${membership.workspaceId} ORDER BY "createdAt" DESC`),prisma.$queryRaw(Prisma.sql`SELECT * FROM "BusinessBillingConfig" WHERE "workspaceId"=${membership.workspaceId} LIMIT 1`),prisma.$queryRaw(Prisma.sql`SELECT "siteType","siteTitle","renewalDate" FROM "TenantProfile" WHERE "workspaceId"=${membership.workspaceId} LIMIT 1`),prisma.$queryRaw(Prisma.sql`SELECT "id","hostname","status","verifiedAt","active" FROM "TenantDomain" WHERE "workspaceId"=${membership.workspaceId} ORDER BY "createdAt" DESC`)]);return <BusinessConfigClient workspaceId={membership.workspaceId} initial={{plans,billing:billing[0]??null,profile:profile[0]??null,domains}}/>}
