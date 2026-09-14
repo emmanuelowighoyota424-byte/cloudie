@@ -99,6 +99,7 @@ jobs:
           cat /tmp/cloudie-e2e.log
           exit 1
       - run: pnpm exec tsx --test tests/e2e/tenant-isolation.test.ts
+      - run: pnpm exec tsx --test tests/e2e/workspace-platform.test.ts
       - run: pnpm exec tsx --test tests/e2e/platform-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/points-billing-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/webhook-job-concurrency.test.ts
