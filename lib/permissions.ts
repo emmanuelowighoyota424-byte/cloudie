@@ -4,7 +4,7 @@ export type Permission =
   | 'workspace.read' | 'workspace.manage' | 'members.read' | 'members.manage'
   | 'shipments.read' | 'shipments.create' | 'shipments.update' | 'shipments.assign' | 'shipments.deliver'
   | 'warehouse.read' | 'warehouse.manage' | 'documents.read' | 'documents.write' | 'documents.delete'
-  | 'orders.read' | 'orders.create' | 'orders.manage' | 'payments.manage' | 'admin.platform'
+  | 'orders.read' | 'orders.create' | 'orders.manage' | 'payments.manage' | 'billing.read' | 'admin.platform'
 
 const permissions: Record<Permission, readonly WorkspaceRole[]> = {
   'workspace.read': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','DRIVER','WAREHOUSE_STAFF','CUSTOMER','VENDOR'],
@@ -25,6 +25,7 @@ const permissions: Record<Permission, readonly WorkspaceRole[]> = {
   'orders.create': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','CUSTOMER'],
   'orders.manage': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF'],
   'payments.manage': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER'],
+  'billing.read': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','DRIVER','WAREHOUSE_STAFF','CUSTOMER','VENDOR'],
   'admin.platform': ['SUPER_ADMIN'],
 }
 
