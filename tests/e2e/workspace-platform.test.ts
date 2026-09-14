@@ -19,7 +19,7 @@ test('five-workspace persistence paths remain tenant-scoped', async () => {
   await prisma.$executeRaw(Prisma.sql`INSERT INTO "BusinessBillingConfig"("id","workspaceId","renewalPoints","autoRenew","status") VALUES (${crypto.randomUUID()},${workspaceId},25,TRUE,'ACTIVE')`)
   const plan=await prisma.$queryRaw<Array<{id:string;minimumAmount:string;termDays:number}>>(Prisma.sql`SELECT "id","minimumAmount"::text AS "minimumAmount","termDays" FROM "BusinessInvestmentPlan" WHERE "id"=${planId} AND "workspaceId"=${workspaceId}`)
   const billing=await prisma.$queryRaw<Array<{renewalPoints:number;autoRenew:boolean}>>(Prisma.sql`SELECT "renewalPoints","autoRenew" FROM "BusinessBillingConfig" WHERE "workspaceId"=${workspaceId}`)
-  assert.equal(plan.length,1);assert.equal(plan[0]?.minimumAmount,'100');assert.equal(plan[0]?.termDays,30);assert.equal(billing[0]?.renewalPoints,25);assert.equal(billing[0]?.autoRenew,true)
+  assert.equal(plan.length,1);assert.equal(Number(plan[0]?.minimumAmount),100);assert.equal(plan[0]?.termDays,30);assert.equal(billing[0]?.renewalPoints,25);assert.equal(billing[0]?.autoRenew,true)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "BusinessBillingConfig" WHERE "workspaceId" IN (${workspaceId},${otherWorkspaceId})`)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "BusinessInvestmentPlan" WHERE "workspaceId" IN (${workspaceId},${otherWorkspaceId})`)
   await prisma.$executeRaw(Prisma.sql`DELETE FROM "TicketingDocument" WHERE "id"=${ticketId}`)
