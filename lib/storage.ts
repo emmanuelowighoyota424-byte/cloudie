@@ -32,7 +32,7 @@ function useFilesystem() {
 
 function filePath(pathname: string) {
   const normalized = pathname.replace(/\\/g, '/').replace(/^\/+/, '')
-  const target = path.resolve(FILESYSTEM_ROOT, normalized)
+  const target = path.resolve(/*turbopackIgnore: true*/ FILESYSTEM_ROOT, normalized)
   const root = path.resolve(/*turbopackIgnore: true*/ FILESYSTEM_ROOT)
   if (target !== root && !target.startsWith(`${root}${path.sep}`)) throw new Error('Invalid storage path')
   return target
