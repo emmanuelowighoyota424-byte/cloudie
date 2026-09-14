@@ -1,31 +1,15 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { requireSuperAdmin } from '@/lib/authorization'
-
-const sections = [['Dashboard','/admin'],['Users','/admin/users'],['Vendors','/admin/vendors'],['Marketplace','/admin/marketplace'],['Orders','/admin/orders'],['Disputes','/admin/disputes'],['Wallet & Ledger','/admin/transactions'],['Shipments','/admin/shipments'],['Documents','/admin/documents'],['Business Tenants','/admin/tenants'],['KYC','/admin/kyc'],['Notifications','/admin/notifications'],['Audit Logs','/admin/audit'],['Analytics','/admin/analytics'],['System Health','/admin/system-health'],['Pricing','/admin/pricing'],['Settings','/admin/settings']]
+import AdminSidebar from './AdminSidebar'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   try { await requireSuperAdmin() } catch { redirect('/admin/login') }
   return <div className="min-h-screen bg-muted/30">
-    <aside className="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r bg-background">
-      <div className="border-b px-5 py-5">
-        <Link href="/admin" className="text-xl font-bold tracking-tight">cloudie<span className="text-primary">.</span></Link>
-        <p className="mt-1 text-xs text-muted-foreground">Super Admin Console</p>
-      </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3" aria-label="Admin sidebar navigation">
-        {sections.map(([label,href], index)=><Link key={href} href={href} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-muted text-[11px] font-semibold group-hover:bg-background">{String(index + 1).padStart(2,'0')}</span>
-          <span>{label}</span>
-        </Link>)}
-      </nav>
-      <div className="border-t p-3">
-        <Link href="/" className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">← Exit Admin</Link>
-      </div>
-    </aside>
-    <div className="pl-64">
+    <AdminSidebar />
+    <div className="pl-[72px] transition-[padding] duration-200">
       <header className="sticky top-0 z-30 border-b bg-background/95 px-4 py-3 backdrop-blur sm:px-6">
         <div className="flex items-center gap-3">
-          <Link href="/admin" className="font-semibold lg:hidden shrink-0">cloudie.</Link>
           <form action="/admin" className="flex-1"><input name="q" placeholder="Search authorized resources…" className="h-10 w-full max-w-xl rounded-lg border bg-muted/40 px-3 text-sm" /></form>
         </div>
       </header>
