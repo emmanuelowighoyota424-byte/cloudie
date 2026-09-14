@@ -1,0 +1,1 @@
+INSERT INTO "PointPricingRule" ("id","workspaceId","action","pointCost","enabled","createdById","reason") SELECT 'system-pricing-tenant-renewal',NULL,'tenant.renewal',50,TRUE,'system','Cloudie default tenant renewal pricing' WHERE NOT EXISTS (SELECT 1 FROM "PointPricingRule" WHERE "action"='tenant.renewal' AND "workspaceId" IS NULL);
