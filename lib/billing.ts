@@ -10,8 +10,8 @@ const DEFAULT_POINT_PRICES: Record<string, number> = {
   'ticketing.receipt_pdf': 20,
   'ticketing.itinerary_pdf': 30,
   'ticketing.customs_pdf': 50,
-  'services.email_send': 5,
-  'services.image_render': 25,
+  'services.email_sent': 1,
+  'services.image_rendered': 2,
   'business.site_renewal': 100,
 }
 
@@ -25,7 +25,7 @@ export async function getActionPrice(input: { workspaceId: string; action: strin
   if (!Number.isSafeInteger(unitCost) || unitCost < 0) throw new Error('Invalid pricing configuration')
   const amount = unitCost * quantity
   if (!Number.isSafeInteger(amount)) throw new Error('Billing amount exceeds supported range')
-  return { unitCost, quantity, amount, source: configuredCost === undefined ? 'platform-default' : 'configured' as const }
+  return { unitCost, quantity, amount, source: configuredCost === undefined ? 'platform-default' as const : 'configured' as const }
 }
 
 export async function chargeForAction(input:{userId:string;workspaceId:string;action:string;description:string;reference:string;quantity?:number}) {
