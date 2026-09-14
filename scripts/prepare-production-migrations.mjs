@@ -25,6 +25,23 @@ function runPrismaCapture(args, env = process.env) {
   return execFileSync('pnpm', ['exec', 'prisma', ...args], { encoding: 'utf8', env })
 }
 
+async function runMigrationDeployWithRetry() {
+  const maxAttempts = 4
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      runPrisma(['migrate', 'deploy'])
+      return
+    } catch (error) {
+      const output = `${error?.stderr ?? ''}\n${error?.stdout ?? ''}\n${error instanceof Error ? error.message : ''}`
+      const isAdvisoryLockTimeout = /P1002|advisory lock|timed out trying to acquire/i.test(output)
+      if (!isAdvisoryLockTimeout || attempt === maxAttempts) throw error
+      const delayMs = attempt * 15000
+      console.warn(`Prisma migration advisory lock timed out; retrying in ${delayMs / 1000}s (attempt ${attempt + 1}/${maxAttempts}).`)
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+}
+
 function isLegacyTable(name) {
   return LEGACY_TABLES.has(name)
 }
@@ -32,7 +49,6 @@ function isLegacyTable(name) {
 function filterPreservedLegacyOperations(sql) {
   const lines = sql.split(/\r?\n/)
   const kept = []
-  let skipping = false
   let statement = ''
 
   const flush = () => {
@@ -122,7 +138,7 @@ async function main() {
     console.log('Prisma migration history already exists; skipping baseline resolution.')
   }
 
-  runPrisma(['migrate', 'deploy'])
+  await runMigrationDeployWithRetry()
   runPrisma(['migrate', 'status'])
 }
 
