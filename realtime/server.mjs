@@ -84,6 +84,10 @@ async function canReceive(event, client) {
   if (!event.workspaceId || event.workspaceId !== client.workspaceId) return false
   if (!(await isWorkspaceMember(client.userId, event.workspaceId))) return false
 
+  if (event.entityType === 'Notification') {
+    const r = await pool.query(`SELECT "userId" FROM "Notification" WHERE "id"=$1`, [event.entityId])
+    return Boolean(r.rowCount && r.rows[0].userId === client.userId)
+  }
   if (event.entityType === 'Shipment' || event.entityType === 'ShipmentEvent') {
     const id = event.entityType === 'Shipment' ? event.entityId : event.entityId
     const r = await pool.query(`SELECT s."creatorId",s."driverId",s."customerId",d."userId" AS "driverUserId",c."email" AS "customerEmail",u."email" AS "viewerEmail" FROM "Shipment" s LEFT JOIN "Driver" d ON d."id"=s."driverId" LEFT JOIN "Customer" c ON c."id"=s."customerId" JOIN "User" u ON u."id"=$2 WHERE s."id"=$1`, [id, client.userId])
