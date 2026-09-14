@@ -20,12 +20,20 @@ export async function getActionPrice(input: { workspaceId: string; action: strin
   if (!Number.isSafeInteger(quantity) || quantity < 1) throw new Error('Invalid billing quantity')
   const rows = await prisma.$queryRaw<Array<{ pointCost: number }>>(Prisma.sql`SELECT "pointCost" FROM "PointPricingRule" WHERE "action"=${input.action} AND "enabled"=TRUE AND ("workspaceId"=${input.workspaceId} OR "workspaceId" IS NULL) AND "effectiveFrom"<=CURRENT_TIMESTAMP AND ("effectiveTo" IS NULL OR "effectiveTo">CURRENT_TIMESTAMP) ORDER BY CASE WHEN "workspaceId"=${input.workspaceId} THEN 0 ELSE 1 END,"effectiveFrom" DESC LIMIT 1`)
   const configuredCost = rows[0]?.pointCost
-  const unitCost = configuredCost === undefined ? DEFAULT_POINT_PRICES[input.action] : Number(configuredCost)
+  let unitCost: number | undefined = configuredCost === undefined ? DEFAULT_POINT_PRICES[input.action] : Number(configuredCost)
+  let source: 'platform-default' | 'configured' | 'business-config' = configuredCost === undefined ? 'platform-default' : 'configured'
+  if (configuredCost === undefined && input.action === 'business.site_renewal') {
+    const config = await prisma.$queryRaw<Array<{ renewalPoints: number }>>(Prisma.sql`SELECT "renewalPoints" FROM "BusinessBillingConfig" WHERE "workspaceId"=${input.workspaceId} LIMIT 1`)
+    if (config[0]?.renewalPoints !== undefined) {
+      unitCost = Number(config[0].renewalPoints)
+      source = 'business-config'
+    }
+  }
   if (unitCost === undefined) throw new Error(`No active pricing rule for ${input.action}`)
   if (!Number.isSafeInteger(unitCost) || unitCost < 0) throw new Error('Invalid pricing configuration')
   const amount = unitCost * quantity
   if (!Number.isSafeInteger(amount)) throw new Error('Billing amount exceeds supported range')
-  return { unitCost, quantity, amount, source: configuredCost === undefined ? 'platform-default' as const : 'configured' as const }
+  return { unitCost, quantity, amount, source }
 }
 
 export async function chargeForAction(input:{userId:string;workspaceId:string;action:string;description:string;reference:string;quantity?:number}) {
