@@ -46,6 +46,7 @@ jobs:
       - run: pnpm exec prisma migrate deploy
       - run: pnpm test
       - run: pnpm exec tsx --test tests/e2e/points-billing-concurrency.test.ts
+      - run: pnpm run lint
       - run: pnpm run typecheck
       - run: pnpm run build
 
