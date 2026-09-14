@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { notifyUsers } from '@/lib/notifications'
+import { qualifyReferralForUser } from '@/lib/referrals'
 
 export function validPaymentSignature(raw: string, signature: string, secret: string) {
   const expected = createHmac('sha256', secret).update(raw).digest('hex')
@@ -49,7 +50,10 @@ export async function POST(request: Request) {
       await tx.webhookEvent.update({ where: { id: webhook.id }, data: { processedAt: new Date() } })
       return { orderId, workspaceId: order.workspaceId, userId: order.userId }
     })
-    if (status === 'PAID' && result.userId) await notifyUsers({ workspaceId: result.workspaceId, userIds: [result.userId], title: 'Payment completed', message: `Payment for order ${result.orderId} was verified.`, type: 'PAYMENT' })
+    if (status === 'PAID' && result.userId) {
+      await notifyUsers({ workspaceId: result.workspaceId, userIds: [result.userId], title: 'Payment completed', message: `Payment for order ${result.orderId} was verified.`, type: 'PAYMENT' })
+      await qualifyReferralForUser(result.userId, `payment:${providerReference}`)
+    }
     return NextResponse.json({ received: true })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Webhook processing failed'
