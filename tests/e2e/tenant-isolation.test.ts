@@ -37,14 +37,14 @@ before(async () => {
     data: {
       name: `${prefix} A`, slug: `${prefix}-a`, ownerId: users[0].id,
       members: { create: [{ userId: users[0].id, role: 'WORKSPACE_ADMIN' }, { userId: users[2].id, role: 'CUSTOMER' }, { userId: users[4].id, role: 'DRIVER' }, { userId: users[6].id, role: 'WAREHOUSE_STAFF' }] },
-      subscription: { create: { plan: 'FREE', status: 'ACTIVE' } },
+      subscription: { create: { id: `sub-${prefix}-a`, plan: 'FREE', status: 'ACTIVE' } },
     },
   })
   workspaceB = await prisma.workspace.create({
     data: {
       name: `${prefix} B`, slug: `${prefix}-b`, ownerId: users[1].id,
       members: { create: [{ userId: users[1].id, role: 'WORKSPACE_ADMIN' }, { userId: users[3].id, role: 'CUSTOMER' }, { userId: users[5].id, role: 'DRIVER' }, { userId: users[7].id, role: 'WAREHOUSE_STAFF' }] },
-      subscription: { create: { plan: 'FREE', status: 'ACTIVE' } },
+      subscription: { create: { id: `sub-${prefix}-b`, plan: 'FREE', status: 'ACTIVE' } },
     },
   })
 
