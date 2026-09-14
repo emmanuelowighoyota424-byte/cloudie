@@ -2,6 +2,8 @@ import { betterAuth } from 'better-auth'
 import { pool } from '@/lib/db/index'
 import { absoluteAppUrl, sendEmail } from '@/lib/email'
 
+const emailDeliveryConfigured = Boolean(process.env.SMTP_HOST?.trim() && process.env.EMAIL_FROM?.trim())
+
 export const auth = betterAuth({
   database: pool,
   baseURL: {
@@ -26,15 +28,15 @@ export const auth = betterAuth({
         html: `<p>Welcome to Cloudie.</p><p><a href="${url}">Verify your email address</a></p><p>This link expires according to your Cloudie authentication policy.</p>`,
       })
     },
-    sendOnSignUp: true,
-    sendOnSignIn: true,
+    sendOnSignUp: emailDeliveryConfigured,
+    sendOnSignIn: emailDeliveryConfigured,
     autoSignInAfterVerification: true,
     expiresIn: 3600,
   },
   emailAndPassword: {
     enabled: true,
-    autoSignIn: false,
-    requireEmailVerification: true,
+    autoSignIn: true,
+    requireEmailVerification: false,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       await sendEmail({
