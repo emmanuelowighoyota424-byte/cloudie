@@ -1,28 +1,11 @@
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { creditPoints } from '@/lib/points'
 import { getCryptoProvider } from '@/lib/crypto/provider'
 
-export async function POST(request: Request) {
-  const configured = process.env.CRYPTO_WEBHOOK_SECRET
-  const supplied = request.headers.get('x-cloudie-crypto-secret')
-  if (!configured || !supplied || supplied !== configured) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const payload = await request.json().catch(() => null)
-  const normalized = getCryptoProvider().normalizeWebhook(payload)
-  if (!normalized) return NextResponse.json({ error: 'Invalid webhook' }, { status: 400 })
-  const event = await prisma.webhookEvent.upsert({ where: { provider_eventId: { provider: 'crypto', eventId: normalized.eventId } }, create: { provider: 'crypto', eventId: normalized.eventId, payload: payload as object }, update: {} })
-  if (event.processedAt) return NextResponse.json({ ok: true, duplicate: true })
-  if (!normalized.txHash && !normalized.reference) return NextResponse.json({ error: 'Webhook lacks verification reference' }, { status: 400 })
-  try {
-    const deposit = normalized.reference ? (await prisma.$queryRaw<Array<{ id: string; asset: string; network: string; expectedAmount: string | null; status: string }>>(Prisma.sql`SELECT "id","asset","network","expectedAmount","status" FROM "CryptoDeposit" WHERE "providerReference"=${normalized.reference} LIMIT 1`))[0] : (await prisma.$queryRaw<Array<{ id: string; asset: string; network: string; expectedAmount: string | null; status: string }>>(Prisma.sql`SELECT "id","asset","network","expectedAmount","status" FROM "CryptoDeposit" WHERE "txHash"=${normalized.txHash} LIMIT 1`))[0]
-    if (!deposit) throw new Error('Deposit not found')
-    const verified = await getCryptoProvider().verifyTransaction({ txHash: normalized.txHash ?? '', asset: deposit.asset, network: deposit.network, expectedAmount: deposit.expectedAmount ?? undefined })
-    const status = ['CONFIRMED','CONFIRMING','DETECTED','FAILED','REJECTED'].includes(verified.status) ? verified.status : 'PENDING'
-    await prisma.$executeRaw(Prisma.sql`UPDATE "CryptoDeposit" SET "status"=${status},"txHash"=${verified.txHash},"confirmations"=${verified.confirmations ?? 0},"updatedAt"=CURRENT_TIMESTAMP,"confirmedAt"=CASE WHEN ${status}='CONFIRMED' THEN CURRENT_TIMESTAMP ELSE "confirmedAt" END WHERE "id"=${deposit.id}`)
-    await prisma.webhookEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } })
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    console.error('crypto webhook processing failed', error)
-    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 })
-  }
-}
+function validSignature(raw:string,signature:string){const secret=process.env.CRYPTO_WEBHOOK_SECRET;if(!secret||!signature)return false;const expected=createHmac('sha256',secret).update(raw).digest('hex');try{return timingSafeEqual(Buffer.from(expected),Buffer.from(signature))}catch{return false}}
+function pointsForAmount(amount:string){const rate=Number(process.env.CRYPTO_POINTS_PER_UNIT??1);const points=Math.floor(Number(amount)*rate);if(!Number.isSafeInteger(points)||points<=0)throw new Error('Invalid crypto points conversion');return points}
+
+export async function POST(request:Request){try{const raw=await request.text();const signature=request.headers.get('x-cloudie-signature')??request.headers.get('x-cloudie-crypto-signature')??'';if(!validSignature(raw,signature))return NextResponse.json({error:'Unauthorized'},{status:401});const payload=JSON.parse(raw) as Record<string,unknown>;const normalized=getCryptoProvider().normalizeWebhook(payload);if(!normalized)return NextResponse.json({error:'Invalid webhook'},{status:400});const event=await prisma.webhookEvent.upsert({where:{provider_eventId:{provider:'crypto',eventId:normalized.eventId}},create:{provider:'crypto',eventId:normalized.eventId,payload:payload as object},update:{}});if(event.processedAt)return NextResponse.json({ok:true,duplicate:true});if(!normalized.txHash&&!normalized.reference)return NextResponse.json({error:'Webhook lacks verification reference'},{status:400});const deposit=normalized.reference?(await prisma.$queryRaw<Array<{id:string;workspaceId:string;userId:string;asset:string;network:string;expectedAmount:string|null;status:string}>>(Prisma.sql`SELECT "id","workspaceId","userId","asset","network","expectedAmount","status" FROM "CryptoDeposit" WHERE "providerReference"=${normalized.reference} LIMIT 1`))[0]:(await prisma.$queryRaw<Array<{id:string;workspaceId:string;userId:string;asset:string;network:string;expectedAmount:string|null;status:string}>>(Prisma.sql`SELECT "id","workspaceId","userId","asset","network","expectedAmount","status" FROM "CryptoDeposit" WHERE "txHash"=${normalized.txHash} LIMIT 1`))[0];if(!deposit)return NextResponse.json({ok:true,status:'IGNORED'});const verified=await getCryptoProvider().verifyTransaction({txHash:normalized.txHash??'',asset:deposit.asset,network:deposit.network,expectedAmount:deposit.expectedAmount??undefined});let points=0;if(verified.status==='CONFIRMED'&&deposit.status!=='CONFIRMED'){points=pointsForAmount(verified.expectedAmount??'0');if(points)await creditPoints({userId:deposit.userId,amount:points,description:`Crypto deposit ${deposit.asset}`,reference:`crypto:${deposit.id}:confirmed`,workspace:deposit.workspaceId})}await prisma.$executeRaw(Prisma.sql`UPDATE "CryptoDeposit" SET "status"=${verified.status},"txHash"=${verified.txHash},"confirmations"=${verified.confirmations},"updatedAt"=CURRENT_TIMESTAMP,"confirmedAt"=CASE WHEN ${verified.status}='CONFIRMED' THEN CURRENT_TIMESTAMP ELSE "confirmedAt" END WHERE "id"=${deposit.id} AND "status"<>'CONFIRMED'`);await prisma.webhookEvent.update({where:{id:event.id},data:{processedAt:new Date()}});return NextResponse.json({ok:true,status:verified.status,pointsCredited:points})}catch(error){const message=error instanceof Error?error.message:'Webhook processing failed';return NextResponse.json({error:message},{status:500})}}
