@@ -45,6 +45,7 @@ jobs:
       - run: pnpm exec prisma generate
       - run: pnpm exec prisma migrate deploy
       - run: pnpm test
+      - run: pnpm exec tsx --test tests/e2e/points-billing-concurrency.test.ts
       - run: pnpm run typecheck
       - run: pnpm run build
 
@@ -98,6 +99,7 @@ jobs:
           exit 1
       - run: pnpm exec tsx --test tests/e2e/tenant-isolation.test.ts
       - run: pnpm exec tsx --test tests/e2e/platform-concurrency.test.ts
+      - run: pnpm exec tsx --test tests/e2e/points-billing-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/webhook-job-concurrency.test.ts
       - run: pnpm exec tsx --test tests/e2e/acceptance-gates.test.ts
       - run: pnpm exec tsx --test tests/e2e/kyc-document-pdf-storage.test.ts
