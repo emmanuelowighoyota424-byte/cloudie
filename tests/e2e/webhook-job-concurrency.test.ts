@@ -17,7 +17,7 @@ test('concurrent CloudieJob claims have one winner', async () => {
 
 test('concurrent webhook deliveries have one processing winner', async () => {
   const eventId = `test-${crypto.randomUUID()}`
-  const webhook = await prisma.webhookEvent.create({ data: { provider: 'test', eventId, payload: { event: 'charge.success' } } })
+  const webhook = await prisma.webhookEvent.create({ data: { id: eventId, provider: 'test', eventId, payload: { event: 'charge.success' } } })
   const claim = () => prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`UPDATE "WebhookEvent" SET "processingAt"=CURRENT_TIMESTAMP WHERE "id"=${webhook.id} AND "processedAt" IS NULL AND ("processingAt" IS NULL OR "processingAt" < CURRENT_TIMESTAMP - INTERVAL '10 minutes') RETURNING "id"`)
   const results = await Promise.all(Array.from({ length: 12 }, claim))
   assert.equal(results.filter((result) => result.length === 1).length, 1)
