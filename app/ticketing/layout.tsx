@@ -1,0 +1,2 @@
+import { CloudieWorkspaceShell } from '@/components/cloudie-workspace-shell'
+export default function TicketingLayout({children}:{children:React.ReactNode}){return <CloudieWorkspaceShell workspace="Ticketing" links={[["Overview","/ticketing"],["Flights","/ticketing#flight"],["Hotels","/ticketing#hotel"],["Invoices","/ticketing#invoice"],["Documents","/ticketing#documents"]]}>{children}</CloudieWorkspaceShell>}

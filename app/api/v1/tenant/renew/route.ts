@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     const currentEnd = workspace.subscription?.currentPeriodEnd && workspace.subscription.currentPeriodEnd.getTime()>Date.now() ? workspace.subscription.currentPeriodEnd : new Date()
     const renewalDate = new Date(currentEnd); renewalDate.setUTCDate(renewalDate.getUTCDate()+30)
     const reference = `tenant:renew:${workspaceId}:${renewalDate.toISOString().slice(0,10)}`
-    const charge = await chargeForAction({userId:user.id,workspaceId,action:'tenant.renewal',description:'Tenant portal renewal',reference})
+    const charge = await chargeForAction({userId:user.id,workspaceId,action:'business.site_renewal',description:'Tenant portal renewal',reference})
     try {
       await prisma.$transaction(async tx => {
         await tx.workspace.update({where:{id:workspaceId},data:{subscriptionStatus:'ACTIVE'}})

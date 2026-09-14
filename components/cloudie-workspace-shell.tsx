@@ -1,0 +1,10 @@
+import Link from 'next/link'
+import { requireUser } from '@/lib/authorization'
+import { getPointBalance } from '@/lib/points'
+import WorkspaceSwitcher from '@/app/dashboard/WorkspaceSwitcher'
+import RealtimeBridge from '@/app/dashboard/RealtimeBridge'
+
+export async function CloudieWorkspaceShell({ children, workspace, links }: { children: React.ReactNode; workspace: string; links: Array<[string,string]> }) {
+  const user = await requireUser(); const points = await getPointBalance(user.id)
+  return <div className="min-h-screen bg-muted/30"><RealtimeBridge/><header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur"><div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6"><Link href="/dashboard" className="font-semibold tracking-tight">cloudie.</Link><div className="flex min-w-0 items-center gap-2 sm:gap-3"><Link href="/dashboard/wallet" className="rounded-lg border bg-background px-3 py-2 text-xs font-semibold shadow-sm">Points: {points.toLocaleString()}</Link><WorkspaceSwitcher/><div className="hidden text-right text-xs text-muted-foreground sm:block"><div>{user.name}</div><div>{user.email}</div></div></div></div></header><div className="mx-auto max-w-7xl"><div className="border-b bg-background/70 px-4 py-3 sm:px-6"><div className="flex items-center gap-2 overflow-x-auto"><span className="shrink-0 rounded-full bg-foreground px-3 py-1 text-xs font-semibold text-background">{workspace}</span>{links.map(([label,href])=><Link key={href} href={href} className="shrink-0 rounded-lg px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">{label}</Link>)}</div></div><main className="min-w-0 p-4 pb-20 sm:p-6">{children}</main></div><nav className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 p-2 backdrop-blur lg:hidden"><div className="flex gap-1 overflow-x-auto"><Link href="/dashboard" className="shrink-0 rounded-lg px-3 py-2 text-xs">Personal</Link>{links.map(([label,href])=><Link key={href} href={href} className="shrink-0 rounded-lg px-3 py-2 text-xs">{label}</Link>)}</div></nav></div>
+}

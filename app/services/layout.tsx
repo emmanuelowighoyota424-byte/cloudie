@@ -1,0 +1,2 @@
+import { CloudieWorkspaceShell } from '@/components/cloudie-workspace-shell'
+export default function ServicesLayout({children}:{children:React.ReactNode}){return <CloudieWorkspaceShell workspace="Services" links={[["Overview","/services"],["Email","/services#email"],["Templates","/services#email"],["Picture Studio","/services#picture-studio"],["Render Library","/services#picture-studio"]]}>{children}</CloudieWorkspaceShell>}
