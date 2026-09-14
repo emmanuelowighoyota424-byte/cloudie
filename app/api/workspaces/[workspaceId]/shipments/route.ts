@@ -23,11 +23,7 @@ export async function GET(_: Request, context: { params: Promise<{ workspaceId: 
     if (!['CUSTOMER', 'SUPER_ADMIN', 'WORKSPACE_ADMIN', 'MANAGER', 'STAFF', 'DRIVER', 'WAREHOUSE_STAFF'].includes(membership.role)) {
       return NextResponse.json({ error: 'Insufficient workspace permissions' }, { status: 403 })
     }
-
-    const where = membership.role === 'CUSTOMER'
-      ? { workspaceId, creatorId: user.id }
-      : { workspaceId }
-
+    const where = membership.role === 'CUSTOMER' ? { workspaceId, creatorId: user.id } : { workspaceId }
     const shipments = await prisma.shipment.findMany({
       where,
       include: { customer: true, driver: true, warehouse: true, events: { orderBy: { createdAt: 'desc' }, take: 5 } },
@@ -63,13 +59,8 @@ export async function POST(request: Request, context: { params: Promise<{ worksp
     let resolvedCustomerId = customerId
     if (membership.role === 'CUSTOMER') {
       if (customerId || driverId || warehouseId) return NextResponse.json({ error: 'Customers cannot assign shipment resources' }, { status: 403 })
-      const customer = await prisma.customer.upsert({
-        where: { id: '__customer_not_used__' },
-        update: {},
-        create: { workspaceId, name: user.name, email: user.email },
-        select: { id: true },
-      }).catch(async () => prisma.customer.findFirst({ where: { workspaceId, email: user.email }, select: { id: true } }))
-      if (!customer) return NextResponse.json({ error: 'Unable to create customer profile' }, { status: 500 })
+      const existingCustomer = await prisma.customer.findFirst({ where: { workspaceId, email: user.email }, select: { id: true } })
+      const customer = existingCustomer ?? await prisma.customer.create({ data: { workspaceId, name: user.name, email: user.email }, select: { id: true } })
       resolvedCustomerId = customer.id
     }
 
