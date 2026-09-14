@@ -1,19 +1,27 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 const STORAGE_KEY = 'cloudie-realtime-cursor'
+const WORKSPACE_KEY = 'cloudie-workspace-id'
 
-export default function RealtimeBridge({ workspaceId = null }: { workspaceId?: string | null }) {
+export default function RealtimeBridge() {
   const router = useRouter()
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const read = () => setWorkspaceId(localStorage.getItem(WORKSPACE_KEY))
+    read()
+    window.addEventListener('cloudie:workspace', read)
+    return () => window.removeEventListener('cloudie:workspace', read)
+  }, [])
 
   useEffect(() => {
     let stopped = false
     let ws: WebSocket | null = null
     let retry = 500
     let timer: ReturnType<typeof setTimeout> | null = null
-
     const connect = async () => {
       try {
         const response = await fetch('/api/realtime/ticket', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ workspaceId }) })
@@ -52,6 +60,5 @@ export default function RealtimeBridge({ workspaceId = null }: { workspaceId?: s
     void connect()
     return () => { stopped = true; if (timer) clearTimeout(timer); ws?.close() }
   }, [router, workspaceId])
-
   return null
 }
