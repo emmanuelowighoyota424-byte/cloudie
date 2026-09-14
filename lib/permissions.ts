@@ -13,7 +13,7 @@ const permissions: Record<Permission, readonly WorkspaceRole[]> = {
   'members.manage': ['SUPER_ADMIN','WORKSPACE_ADMIN'],
   'shipments.read': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','DRIVER','WAREHOUSE_STAFF','CUSTOMER'],
   'shipments.create': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','CUSTOMER'],
-  'shipments.update': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF'],
+  'shipments.update': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','STAFF','DRIVER'],
   'shipments.assign': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER'],
   'shipments.deliver': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','DRIVER'],
   'warehouse.read': ['SUPER_ADMIN','WORKSPACE_ADMIN','MANAGER','WAREHOUSE_STAFF'],

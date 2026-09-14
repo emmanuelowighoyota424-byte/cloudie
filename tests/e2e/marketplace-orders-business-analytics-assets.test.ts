@@ -48,7 +48,7 @@ before(async () => {
         { userId: users[2].id, role: 'CUSTOMER' },
         { userId: users[4].id, role: 'STAFF' },
       ] },
-      subscription: { create: { plan: 'FREE', status: 'ACTIVE' } },
+      subscription: { create: { id: crypto.randomUUID(), plan: 'FREE', status: 'ACTIVE' } },
     },
   })
   workspaceB = await prisma.workspace.create({
@@ -58,7 +58,7 @@ before(async () => {
         { userId: users[1].id, role: 'WORKSPACE_ADMIN' },
         { userId: users[3].id, role: 'CUSTOMER' },
       ] },
-      subscription: { create: { plan: 'FREE', status: 'ACTIVE' } },
+      subscription: { create: { id: crypto.randomUUID(), plan: 'FREE', status: 'ACTIVE' } },
     },
   })
 

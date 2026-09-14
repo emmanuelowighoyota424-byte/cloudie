@@ -1,5 +1,6 @@
 name: Cloudie CI
 
+# Phase 3 verification trigger: run the complete production validation matrix on PR updates.
 on:
   push:
     branches: [main]

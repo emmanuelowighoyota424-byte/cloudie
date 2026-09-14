@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { debitPoints } from '@/lib/points'
 
 const DEFAULT_POINT_PRICES: Record<string, number> = {
-  'shipments.create': 25,
+  'shipments.create': 1000,
   'ticketing.flight_pdf': 50,
   'ticketing.hotel_pdf': 50,
   'ticketing.invoice_pdf': 40,
