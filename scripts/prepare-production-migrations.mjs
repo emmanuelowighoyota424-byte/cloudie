@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { writeFileSync } from 'node:fs'
 import pg from 'pg'
 
 const { Client } = pg
@@ -18,7 +18,21 @@ const LEGACY_TABLES = new Set([
 ])
 
 function runPrisma(args, env = process.env) {
-  return execFileSync('pnpm', ['exec', 'prisma', ...args], { stdio: 'inherit', env })
+  try {
+    const output = execFileSync('pnpm', ['exec', 'prisma', ...args], {
+      encoding: 'utf8',
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    if (output) process.stdout.write(output)
+    return output
+  } catch (error) {
+    const stdout = Buffer.isBuffer(error?.stdout) ? error.stdout.toString() : String(error?.stdout ?? '')
+    const stderr = Buffer.isBuffer(error?.stderr) ? error.stderr.toString() : String(error?.stderr ?? '')
+    if (stdout) process.stdout.write(stdout)
+    if (stderr) process.stderr.write(stderr)
+    throw error
+  }
 }
 
 function runPrismaCapture(args, env = process.env) {
@@ -26,16 +40,20 @@ function runPrismaCapture(args, env = process.env) {
 }
 
 async function runMigrationDeployWithRetry() {
-  const maxAttempts = 4
+  const maxAttempts = 5
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
       runPrisma(['migrate', 'deploy'])
+      console.log(`Prisma migrations deployed successfully on attempt ${attempt}.`)
       return
     } catch (error) {
-      const output = `${error?.stderr ?? ''}\n${error?.stdout ?? ''}\n${error instanceof Error ? error.message : ''}`
+      const stdout = Buffer.isBuffer(error?.stdout) ? error.stdout.toString() : String(error?.stdout ?? '')
+      const stderr = Buffer.isBuffer(error?.stderr) ? error.stderr.toString() : String(error?.stderr ?? '')
+      const output = `${stdout}\n${stderr}\n${error instanceof Error ? error.message : ''}`
       const isAdvisoryLockTimeout = /P1002|advisory lock|timed out trying to acquire/i.test(output)
       if (!isAdvisoryLockTimeout || attempt === maxAttempts) throw error
-      const delayMs = attempt * 15000
+
+      const delayMs = attempt * 20000
       console.warn(`Prisma migration advisory lock timed out; retrying in ${delayMs / 1000}s (attempt ${attempt + 1}/${maxAttempts}).`)
       await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
