@@ -19,15 +19,17 @@ export const auth = betterAuth({
   verification: { modelName: 'Verification' },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
-      void sendEmail({
+      await sendEmail({
         to: user.email,
         subject: 'Verify your Cloudie email',
         text: `Verify your Cloudie account: ${url}`,
         html: `<p>Welcome to Cloudie.</p><p><a href="${url}">Verify your email address</a></p><p>This link expires according to your Cloudie authentication policy.</p>`,
-      }).catch((error) => console.error('verification email failed', error))
+      })
     },
     sendOnSignUp: true,
+    sendOnSignIn: true,
     autoSignInAfterVerification: true,
+    expiresIn: 3600,
   },
   emailAndPassword: {
     enabled: true,
@@ -35,12 +37,12 @@ export const auth = betterAuth({
     requireEmailVerification: true,
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
-      void sendEmail({
+      await sendEmail({
         to: user.email,
         subject: 'Reset your Cloudie password',
         text: `Reset your Cloudie password: ${url}`,
         html: `<p>A password reset was requested for your Cloudie account.</p><p><a href="${url}">Reset your password</a></p><p>If you did not request this, you can safely ignore this message.</p>`,
-      }).catch((error) => console.error('password reset email failed', error))
+      })
     },
   },
   trustedOrigins: [
