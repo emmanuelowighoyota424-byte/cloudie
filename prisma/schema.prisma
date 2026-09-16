@@ -12,6 +12,7 @@ enum UserRole {
   ADMIN
   SUPER_ADMIN
 }
+
 enum WorkspaceRole {
   SUPER_ADMIN
   WORKSPACE_ADMIN
@@ -22,16 +23,19 @@ enum WorkspaceRole {
   CUSTOMER
   VENDOR
 }
+
 enum WorkspaceMemberStatus {
   ACTIVE
   SUSPENDED
 }
+
 enum InvitationStatus {
   PENDING
   ACCEPTED
   REVOKED
   EXPIRED
 }
+
 enum ShipmentStatus {
   PENDING
   CONFIRMED
@@ -43,12 +47,14 @@ enum ShipmentStatus {
   FAILED
   RETURNED
 }
+
 enum Plan {
   FREE
   STARTER
   BUSINESS
   ENTERPRISE
 }
+
 enum SubscriptionStatus {
   ACTIVE
   TRIALING
@@ -65,6 +71,7 @@ model User {
   image String?
   role UserRole @default(USER)
   suspendedAt DateTime?
+  referralCode String? @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   pointLedger PointLedger[]
@@ -91,6 +98,7 @@ model User {
 model PointLedger {
   id String @id @default(cuid())
   userId String
+  workspaceId String?
   amount Int
   balance Int
   description String
@@ -98,6 +106,7 @@ model PointLedger {
   createdAt DateTime @default(now())
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   @@index([userId,createdAt])
+  @@index([reference])
 }
 
 model Workspace {
@@ -401,7 +410,7 @@ model OrderItem {
 }
 
 model Payment {
-  id String @id @default(cuid())
+  id String @id
   orderId String
   provider String
   providerReference String?
@@ -416,7 +425,7 @@ model Payment {
 }
 
 model WebhookEvent {
-  id String @id @default(cuid())
+  id String @id
   provider String
   eventId String
   payload Json
@@ -427,7 +436,7 @@ model WebhookEvent {
 }
 
 model Subscription {
-  id String @id @default(cuid())
+  id String @id
   workspaceId String @unique
   plan Plan
   status SubscriptionStatus
@@ -461,8 +470,14 @@ model Referral {
   referredEmail String
   reward Int @default(0)
   status String @default("PENDING")
+  code String?
+  referredUserId String? @unique
+  qualifyingEvent String?
   createdAt DateTime @default(now())
+  attributedAt DateTime?
+  rewardedAt DateTime?
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([userId,createdAt])
 }
 
 model AuditLog {
@@ -486,7 +501,7 @@ model AuditLog {
 }
 
 model KYCVerification {
-  id String @id @default(cuid())
+  id String @id
   userId String
   status String @default("PENDING")
   provider String?

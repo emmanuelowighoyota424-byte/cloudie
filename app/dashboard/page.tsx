@@ -1,32 +1,49 @@
-import Link from 'next/link'
+import { prisma } from '@/lib/prisma'
 import { requireUser } from '@/lib/authorization'
 import { getPointBalance, getPointLedger } from '@/lib/points'
-import { prisma } from '@/lib/prisma'
+import { ActivityPanel, PointsHero, QuickLinks, RecentShipments, StatCard, WorkspaceGrid } from '@/components/cloudie/dashboard-ui'
+import { ArrowUpRight, CheckCircle2, Package, Users } from 'lucide-react'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const user = await requireUser()
-  const [balance, ledger, orders, shipments, notifications, documents, referrals, kyc] = await Promise.all([
-    getPointBalance(user.id), getPointLedger(user.id, { take: 6 }),
-    prisma.order.findMany({ where: { userId: user.id }, include: { items: { include: { product: true } } }, orderBy: { createdAt: 'desc' }, take: 5 }),
-    prisma.shipment.findMany({ where: { creatorId: user.id }, orderBy: { createdAt: 'desc' }, take: 5 }),
-    prisma.notification.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 5 }),
-    prisma.document.findMany({ where: { ownerId: user.id }, orderBy: { createdAt: 'desc' }, take: 5 }),
-    prisma.referral.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: 5 }),
-    prisma.kYCVerification.findFirst({ where: { userId: user.id }, orderBy: { submittedAt: 'desc' } }),
+  const startOfMonth = new Date()
+  startOfMonth.setUTCDate(1)
+  startOfMonth.setUTCHours(0, 0, 0, 0)
+
+  const [balance, ledger, activeShipments, completedShipments, referrals, monthlyTransactions, shipments] = await Promise.all([
+    getPointBalance(user.id),
+    getPointLedger(user.id, { take: 8 }),
+    prisma.shipment.count({ where: { creatorId: user.id, status: { in: ['PENDING', 'CONFIRMED', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'] } } }),
+    prisma.shipment.count({ where: { creatorId: user.id, status: 'DELIVERED' } }),
+    prisma.referral.count({ where: { userId: user.id } }),
+    prisma.pointLedger.count({ where: { userId: user.id, createdAt: { gte: startOfMonth } } }),
+    prisma.shipment.findMany({ where: { creatorId: user.id }, orderBy: { createdAt: 'desc' }, take: 6, select: { id: true, trackingId: true, origin: true, destination: true, status: true, createdAt: true } }),
   ])
-  return <div className="space-y-6">
-    <div><p className="text-sm text-muted-foreground">Personal workspace</p><h1 className="text-2xl font-semibold">Welcome back, {user.name}</h1></div>
-    <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Metric title="Points balance" value={balance.toLocaleString()} href="/dashboard/wallet"/><Metric title="Orders" value={String(orders.length)} href="/dashboard/orders"/><Metric title="Shipments" value={String(shipments.length)} href="/customer"/><Metric title="Unread notifications" value={String(notifications.filter(n=>!n.readAt).length)} href="/dashboard/notifications"/></section>
-    <section className="grid gap-6 xl:grid-cols-2">
-      <Panel title="Recent point activity" href="/dashboard/transactions"><div className="divide-y">{ledger.length?ledger.map(x=><div key={x.id} className="flex justify-between py-3 text-sm"><span>{x.description}<span className="ml-2 text-xs text-muted-foreground">{x.reference??'—'}</span></span><b className={x.amount>=0?'text-emerald-600':'text-red-600'}>{x.amount>=0?'+':''}{x.amount}</b></div>):<Empty text="No point transactions yet."/>}</div></Panel>
-      <Panel title="Recent orders" href="/dashboard/orders"><div className="divide-y">{orders.length?orders.map(o=><Link href={`/dashboard/orders/${o.id}`} key={o.id} className="flex justify-between py-3 text-sm hover:bg-muted/50"><span>Order {o.id.slice(-8)}</span><span>{o.status} · {o.total.toString()}</span></Link>):<Empty text="No orders yet."/>}</div></Panel>
-      <Panel title="Shipments" href="/customer"><div className="divide-y">{shipments.length?shipments.map(s=><Link href={`/customer?tracking=${encodeURIComponent(s.trackingId)}`} key={s.id} className="flex justify-between py-3 text-sm"><span>{s.trackingId}</span><span>{s.status}</span></Link>):<Empty text="No shipments yet."/>}</div></Panel>
-      <Panel title="Account status"><div className="space-y-3 text-sm"><p><span className="text-muted-foreground">Account:</span> Active</p><p><span className="text-muted-foreground">Email verified:</span> {user.emailVerified?'Yes':'No'}</p><p><span className="text-muted-foreground">KYC:</span> {kyc?.status??'Not submitted'}</p><p><span className="text-muted-foreground">Referrals:</span> {referrals.length}</p><p><span className="text-muted-foreground">Documents:</span> {documents.length}</p></div></Panel>
+
+  return <div className="mx-auto max-w-[1500px] space-y-8">
+    <section className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div><p className="text-sm font-medium text-muted-foreground">Personal workspace</p><h1 className="mt-1 text-3xl font-semibold tracking-tight sm:text-4xl">Good to see you, {user.name.split(' ')[0]}.</h1><p className="mt-2 text-sm text-muted-foreground">A clear view of your wallet, shipments and Cloudie activity.</p></div>
+      <p className="text-xs text-muted-foreground">{new Intl.DateTimeFormat('en', { dateStyle: 'full' }).format(new Date())}</p>
     </section>
+
+    <PointsHero balance={balance} />
+
+    <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <StatCard label="Active shipments" value={activeShipments} href="/shipments" icon={<Package className="size-4" />} />
+      <StatCard label="Completed shipments" value={completedShipments} href="/shipments?status=DELIVERED" icon={<CheckCircle2 className="size-4" />} />
+      <StatCard label="Referrals" value={referrals} href="/dashboard/referrals" icon={<Users className="size-4" />} />
+      <StatCard label="Monthly transactions" value={monthlyTransactions} href="/dashboard/transactions" icon={<ArrowUpRight className="size-4" />} />
+    </section>
+
+    <WorkspaceGrid />
+
+    <section className="grid gap-4 xl:grid-cols-[1.1fr_.9fr]">
+      <ActivityPanel transactions={ledger.map((item) => ({ ...item, amount: Number(item.amount), balance: Number(item.balance) }))} />
+      <RecentShipments shipments={shipments} />
+    </section>
+
+    <QuickLinks />
   </div>
 }
-function Metric({title,value,href}:{title:string;value:string;href:string}){return <Link href={href} className="rounded-xl border bg-background p-5 shadow-sm hover:border-foreground/30"><p className="text-xs text-muted-foreground">{title}</p><p className="mt-2 text-2xl font-semibold">{value}</p></Link>}
-function Panel({title,href,children}:{title:string;href?:string;children:React.ReactNode}){return <section className="rounded-xl border bg-background p-5 shadow-sm"><div className="mb-3 flex items-center justify-between"><h2 className="font-medium">{title}</h2>{href&&<Link href={href} className="text-xs underline">View all</Link>}</div>{children}</section>}
-function Empty({text}:{text:string}){return <p className="py-5 text-sm text-muted-foreground">{text}</p>}

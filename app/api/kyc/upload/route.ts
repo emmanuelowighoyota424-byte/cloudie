@@ -25,28 +25,20 @@ export async function POST(request: Request) {
     const storageKey = `kyc/${user.id}/${crypto.randomUUID()}-${safeName}`
     await putPrivateObject(storageKey, await file.arrayBuffer(), file.type)
 
-    let submissionId = crypto.randomUUID()
-    let kycId: string
-    try {
-      const result = await prisma.$transaction(async (tx) => {
-        let kyc = await tx.kYCVerification.findFirst({ where: { userId: user.id }, orderBy: { submittedAt: 'desc' } })
-        if (!kyc || ['REJECTED', 'NOT_STARTED'].includes(kyc.status)) {
-          kyc = await tx.kYCVerification.create({ data: { userId: user.id, status: 'PENDING' } })
-        } else if (kyc.status === 'VERIFIED') {
-          throw new Error('KYC is already verified')
-        }
-        const id = crypto.randomUUID()
-        await tx.$executeRaw(Prisma.sql`INSERT INTO "KYCSubmission" ("id","userId","kycId","documentType","storageKey","originalFilename","mimeType","status") VALUES (${id},${user.id},${kyc.id},${documentType},${storageKey},${safeName},${file.type},'PENDING')`)
-        await tx.auditLog.create({ data: { actorId: user.id, userId: user.id, action: 'kyc.document_uploaded', entity: 'KYCSubmission', entityId: id, metadata: { documentType, originalFilename: safeName, mimeType: file.type, sizeBytes: file.size, storageKey } } })
-        return { kycId: kyc.id, submissionId: id }
-      })
-      kycId = result.kycId
-      submissionId = result.submissionId
-    } catch (error) {
-      throw error
-    }
+    const result = await prisma.$transaction(async (tx) => {
+      let kyc = await tx.kYCVerification.findFirst({ where: { userId: user.id }, orderBy: { submittedAt: 'desc' } })
+      if (!kyc || ['REJECTED', 'NOT_STARTED'].includes(kyc.status)) {
+        kyc = await tx.kYCVerification.create({ data: { id: crypto.randomUUID(), userId: user.id, status: 'PENDING' } })
+      } else if (kyc.status === 'VERIFIED') {
+        throw new Error('KYC is already verified')
+      }
+      const id = crypto.randomUUID()
+      await tx.$executeRaw(Prisma.sql`INSERT INTO "KYCSubmission" ("id","userId","kycId","documentType","storageKey","originalFilename","mimeType","status") VALUES (${id},${user.id},${kyc.id},${documentType},${storageKey},${safeName},${file.type},'PENDING')`)
+      await tx.auditLog.create({ data: { actorId: user.id, userId: user.id, action: 'kyc.document_uploaded', entity: 'KYCSubmission', entityId: id, metadata: { documentType, originalFilename: safeName, mimeType: file.type, sizeBytes: file.size, storageKey } } })
+      return { kycId: kyc.id, submissionId: id }
+    })
 
-    return NextResponse.json({ kycId, submissionId, storageKey, originalFilename: safeName, mimeType: file.type, sizeBytes: file.size }, { status: 201 })
+    return NextResponse.json({ kycId: result.kycId, submissionId: result.submissionId, storageKey, originalFilename: safeName, mimeType: file.type, sizeBytes: file.size }, { status: 201 })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to upload KYC document'
     const status = message.includes('Authentication') ? 401 : message.includes('configured') ? 503 : 400
