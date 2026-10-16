@@ -1,0 +1,48 @@
+name: InfinityFree Static Export
+
+on: [push, workflow_dispatch]
+
+jobs:
+  export:
+    name: Build static site for InfinityFree
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      STATIC_EXPORT: "1"
+      DATABASE_URL: "postgresql://build:build@127.0.0.1:5432/cloudie_build?schema=public"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build static export
+        run: pnpm build
+      - name: Add InfinityFree fallback routing
+        shell: bash
+        run: |
+          test -f out/index.html
+          cat > out/.htaccess <<'HTACCESS'
+Options -Indexes
+DirectoryIndex index.html
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "DENY"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+HTACCESS
+      - name: Upload static site artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudie-infinityfree-static
+          path: out/
+          if-no-files-found: error
+          retention-days: 7
