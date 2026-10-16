@@ -1,6 +1,6 @@
 name: InfinityFree Static Export
 
-on:
+"on":
   workflow_dispatch:
   push:
     branches:
