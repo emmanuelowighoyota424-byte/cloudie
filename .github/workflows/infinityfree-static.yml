@@ -1,19 +1,6 @@
 name: InfinityFree Static Export
 
-"on":
-  workflow_dispatch:
-  push:
-    branches:
-      - infinityfree-static-export
-    paths:
-      - "app/**"
-      - "components/**"
-      - "lib/**"
-      - "public/**"
-      - "next.config.mjs"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - ".github/workflows/infinityfree-static.yml"
+on: [push, workflow_dispatch]
 
 jobs:
   export:
@@ -22,7 +9,6 @@ jobs:
     timeout-minutes: 20
     env:
       STATIC_EXPORT: "1"
-      # Build-time placeholder only; never use this as a production database URL.
       DATABASE_URL: "postgresql://build:build@127.0.0.1:5432/cloudie_build?schema=public"
     steps:
       - name: Checkout
@@ -42,8 +28,8 @@ jobs:
       - name: Add InfinityFree fallback routing
         shell: bash
         run: |
-          if [ -f out/index.html ]; then
-            cat > out/.htaccess <<'HTACCESS'
+          test -f out/index.html
+          cat > out/.htaccess <<'HTACCESS'
 Options -Indexes
 DirectoryIndex index.html
 <IfModule mod_headers.c>
@@ -53,10 +39,6 @@ DirectoryIndex index.html
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
 </IfModule>
 HTACCESS
-          else
-            echo "Static export output directory 'out' was not created." >&2
-            exit 1
-          fi
       - name: Upload static site artifact
         uses: actions/upload-artifact@v4
         with:
